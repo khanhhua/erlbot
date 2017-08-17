@@ -1,2 +1,9 @@
-# erlbot
-Facebook Messenger chatbot in Erlang
+erlbot
+=====
+
+An OTP application
+
+Build
+-----
+
+    $ rebar3 compile
