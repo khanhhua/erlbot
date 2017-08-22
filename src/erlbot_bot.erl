@@ -7,30 +7,31 @@
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 -export([greeting/2, greeting/3, listening/2, listening/3, guiding/2, guiding/3]).
 
+-include("headers.hrl").
+
 -define(SERVER, ?MODULE).
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([start_link/1, stop/0, tell/1]).
+-export([start_link/1, stop/1, tell/2]).
 
 
 
 %% ====================================================================
 %% Behavioural functions
 %% ====================================================================
--record(conversation, {id, username, topic, messages=[]}).
--record(message, {who, text}).
 
 %% start_link/1
 %% ========== 
 start_link(Username) ->
-    gen_fsm:start_link({local, ?SERVER}, ?MODULE, #conversation{id=1, username=Username}, []).
+    % Query database for the backing conversation
+    gen_fsm:start_link(?MODULE, #conversation{id=Username, username=Username}, []).
 
-stop() ->
-    gen_fsm:stop(?SERVER).
+stop(BotPid) ->
+    gen_fsm:stop(BotPid).
 
-tell(TextMessage) ->
-    gen_fsm:send_event(?SERVER, #message{who=user, text=TextMessage}).
+tell(BotPid, TextMessage) ->
+    gen_fsm:send_event(BotPid, #message{who=user, text=TextMessage}).
 
 %% init/1
 %% ====================================================================
@@ -47,7 +48,8 @@ tell(TextMessage) ->
 	Reason :: term().
 %% ====================================================================
 init(Conversation) ->
-    {ok, greeting, Conversation}.
+    io:format("Michelle has waken up. Will greet in 30s...~n"),
+    {ok, greeting, Conversation, 30000}.
 
 
 %% greeting/2
@@ -64,9 +66,13 @@ init(Conversation) ->
 	Reason :: term().
 %% ====================================================================
 % @todo implement actual conversation
-greeting(Event, StateData) ->
+greeting(Message, Conversation) when is_record(Message, message) ->
     io:format("Michelle is greeting...~n"),
-    {next_state, listening, StateData, 5000}.
+
+    Conversation2 = pick_up_message(Message, Conversation),
+    io:format("Conversation2 is now ~p...~n", [Conversation2]),
+    {next_state, listening, Conversation2, 20000}.
+
 
 %% greeting/3
 %% ====================================================================
@@ -89,7 +95,7 @@ greeting(Event, StateData) ->
 greeting(Event, From, StateData) ->
     io:format("Michelle is greeting...~n"),
     Reply = ok,
-    {reply, Reply, listening, StateData}.
+    {reply, Reply, listening, StateData, 5000}.
 
 %% listening/3
 %% ====================================================================
@@ -127,12 +133,20 @@ listening(Event, From, StateData) ->
     Reason :: term().
 %% ====================================================================
 %% @todo implement actual conversation
-listening(Event, StateData) ->
+listening(timeout, Conversation) ->
+    io:format("Michelle: Sorry but are you still there...~n"),
+    {next_state, listening, Conversation, 5000};
+listening(Message, Conversation) when is_record(Message, message)->
     io:format("Michelle is listening to your request...~n"),
+    io:format("listening: ~p ~p ~n", [Message, Conversation#conversation.messages]),
     % If conversation has one reference to "bus", then begin to guide
-    case Event of
-        #message{who=user, text="Bus how long"} -> {next_state, guiding, StateData#conversation{topic=bus}};
-        timeout -> io:format("Michelle: Sorry but are you still there...~n")
+
+    case Message of
+        #message{who=user, text="Bus how long"} ->
+          Conversation2 = pick_up_message(Message, Conversation),
+          Conversation3 = Conversation2#conversation{topic = bus},
+          {next_state, guiding, Conversation3};
+        _ -> {next_state, listening, Conversation#conversation{topic=undefined, messages = []}, 5000}
     end.
     
 
@@ -149,9 +163,13 @@ listening(Event, StateData) ->
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
 %% ====================================================================
-guiding(Event, StateData) ->
-    io:format("Michelle is guiding user...~n"),
-    {next_state, listening, StateData}.
+guiding(timeout, StateData) ->
+    io:format("While so long!!!!~n"),
+    {next_state, listening, StateData, 30000};
+guiding(Message, Conversation) when is_record(Message, message) ->
+    Conversation2 = pick_up_message(Message, Conversation),
+    io:format("Thank you for your information...~p~n", [Conversation2#conversation.messages]),
+    {next_state, listening, Conversation2#conversation{topic=undefined, messages = []}, 30000}.
 
 %% guiding/3
 %% ====================================================================
@@ -189,6 +207,7 @@ guiding(Event, From, StateData) ->
 	Reason :: term().
 %% ====================================================================
 handle_event(Event, StateName, StateData) ->
+    io:format("Handle event ~p ~p ~n", [Event, StateName]),
     {next_state, StateName, StateData}.
 
 
@@ -260,4 +279,6 @@ code_change(OldVsn, StateName, StateData, Extra) ->
 %% Internal functions
 %% ====================================================================
 
-
+pick_up_message(Message, Conversation) ->
+  Messages = Conversation#conversation.messages ++ [Message],
+  Conversation#conversation{messages = Messages}.

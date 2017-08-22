@@ -9,7 +9,7 @@
 
 %% API
 -export([start_link/0]).
--export([]).
+-export([create_bot/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -23,8 +23,14 @@
 start_link() ->
   supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
-create_bot(ConversationID) ->
-  ok.
+create_bot(Username) ->
+  MFA = {erlbot_bot,start_link,[Username]},
+  supervisor:start_child(?SERVER,
+    #{id => Username,
+      start => MFA,
+      restart => transient,
+      type => worker
+    }).
 
 %%====================================================================
 %% Supervisor callbacks

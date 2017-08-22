@@ -5,4 +5,5 @@
 %% -Who: term() :: user, bot
 %% -What: binary
 
--record(conversation, {id, topic, messages=[]}).
+-record(conversation, {id, username, topic, messages=[]}).
+-record(message, {who, text}).
