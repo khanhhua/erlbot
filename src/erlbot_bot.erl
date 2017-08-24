@@ -13,7 +13,7 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([start_link/1, stop/1, tell/2]).
+-export([start_link/1, stop/1, tell/2, subscribe/2, unsubscribe/2]).
 
 
 
@@ -24,14 +24,25 @@
 %% start_link/1
 %% ========== 
 start_link(Username) ->
-    % Query database for the backing conversation
-    gen_fsm:start_link(?MODULE, #conversation{id=Username, username=Username}, []).
+  % Query database for the backing conversation
+  {ok, Pid} = gen_fsm:start_link(?MODULE, #conversation{id=Username, username=Username}, []),
+  io:format("Registering ~p by the name ~p", [Pid, Username]),
+  global:register_name(Username, Pid),
+  {ok, Pid}.
 
 stop(BotPid) ->
-    gen_fsm:stop(BotPid).
+  gen_fsm:stop(BotPid).
 
 tell(BotPid, TextMessage) ->
-    gen_fsm:send_event(BotPid, #message{who=user, text=TextMessage}).
+  gen_fsm:send_event(BotPid, #message{who=user, text=TextMessage}).
+
+subscribe(BotPid, From) ->
+  io:format("Subscribe ~p to the bot ~p~n", [From, BotPid]),
+  gen_fsm:send_all_state_event(BotPid, {subscription, From}).
+
+unsubscribe(BotPid, From) ->
+  io:format("Unsubscribe ~p to the bot ~p~n", [From, BotPid]),
+  gen_fsm:send_all_state_event(BotPid, {unsubscription, From}).
 
 %% init/1
 %% ====================================================================
@@ -49,7 +60,7 @@ tell(BotPid, TextMessage) ->
 %% ====================================================================
 init(Conversation) ->
     io:format("Michelle has waken up. Will greet in 30s...~n"),
-    {ok, greeting, Conversation, 30000}.
+    {ok, greeting, Conversation, 10000}.
 
 
 %% greeting/2
@@ -67,12 +78,17 @@ init(Conversation) ->
 %% ====================================================================
 % @todo implement actual conversation
 greeting(Message, Conversation) when is_record(Message, message) ->
-    io:format("Michelle is greeting...~n"),
+  io:format("Michelle is greeting...~n"),
 
-    Conversation2 = pick_up_message(Message, Conversation),
-    io:format("Conversation2 is now ~p...~n", [Conversation2]),
-    {next_state, listening, Conversation2, 20000}.
+  Text = "Michelle is here",
+  Conversation2 = reply(Text, Conversation),
 
+  Conversation3 = pick_up_message(Message, Conversation),
+  io:format("Conversation is now ~p...~n", [Conversation3]),
+  {next_state, listening, Conversation2, 20000};
+
+greeting(Message, Conversation) ->
+  {next_state, listening, Conversation, 20000}.
 
 %% greeting/3
 %% ====================================================================
@@ -134,8 +150,10 @@ listening(Event, From, StateData) ->
 %% ====================================================================
 %% @todo implement actual conversation
 listening(timeout, Conversation) ->
-    io:format("Michelle: Sorry but are you still there...~n"),
-    {next_state, listening, Conversation, 5000};
+  Text = "Sorry but are you still there...",
+  Conversation2 = reply(Text, Conversation),
+  io:format("~p~n", [Text]),
+  {next_state, listening, Conversation2, 30000};
 listening(Message, Conversation) when is_record(Message, message)->
     io:format("Michelle is listening to your request...~n"),
     io:format("listening: ~p ~p ~n", [Message, Conversation#conversation.messages]),
@@ -143,9 +161,14 @@ listening(Message, Conversation) when is_record(Message, message)->
 
     case Message of
         #message{who=user, text="Bus how long"} ->
-          Conversation2 = pick_up_message(Message, Conversation),
-          Conversation3 = Conversation2#conversation{topic = bus},
-          {next_state, guiding, Conversation3};
+          Conversation2 = reply("Lemme see....", Conversation),
+
+          Text = "15 minutes!",
+
+          Conversation3 = pick_up_message(Message, Conversation2),
+          Conversation4 = Conversation3#conversation{topic = bus},
+          Conversation5 = reply(Text, Conversation4),
+          {next_state, guiding, Conversation5, 30000};
         _ -> {next_state, listening, Conversation#conversation{topic=undefined, messages = []}, 5000}
     end.
     
@@ -167,9 +190,13 @@ guiding(timeout, StateData) ->
     io:format("While so long!!!!~n"),
     {next_state, listening, StateData, 30000};
 guiding(Message, Conversation) when is_record(Message, message) ->
-    Conversation2 = pick_up_message(Message, Conversation),
-    io:format("Thank you for your information...~p~n", [Conversation2#conversation.messages]),
-    {next_state, listening, Conversation2#conversation{topic=undefined, messages = []}, 30000}.
+  Conversation2 = pick_up_message(Message, Conversation),
+
+  Text = "I said 15 minutes!",
+  Conversation3 = reply(Text, Conversation2),
+
+  io:format("Thank you for your information...~p~n", [Conversation3#conversation.messages]),
+  {next_state, listening, Conversation3#conversation{topic=undefined, messages = []}, 30000}.
 
 %% guiding/3
 %% ====================================================================
@@ -207,8 +234,16 @@ guiding(Event, From, StateData) ->
 	Reason :: term().
 %% ====================================================================
 handle_event(Event, StateName, StateData) ->
-    io:format("Handle event ~p ~p ~n", [Event, StateName]),
-    {next_state, StateName, StateData}.
+  io:format("Handle event ~p ~p ~n", [Event, StateName]),
+  case Event of
+    {subscription, From} ->
+      {next_state, StateName, StateData#conversation{subscribers = StateData#conversation.subscribers ++ [From] }};
+    {unsubscription, From} ->
+      {next_state, StateName, StateData#conversation{subscribers = lists:filter(fun (X) -> X =:= From end, StateData#conversation.subscribers) }};
+    _ ->
+      {next_state, StateName, StateData}
+  end.
+
 
 
 %% handle_sync_event/4
@@ -282,3 +317,12 @@ code_change(OldVsn, StateName, StateData, Extra) ->
 pick_up_message(Message, Conversation) ->
   Messages = Conversation#conversation.messages ++ [Message],
   Conversation#conversation{messages = Messages}.
+
+reply(Text, Conversation) ->
+  Subscribers = Conversation#conversation.subscribers,
+  lists:foreach(
+    fun (S) ->
+      catch S!{reply, Text}
+    end,
+    Subscribers),
+  pick_up_message(#message{who=bot, text=Text}, Conversation).

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ERL Bot</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.6/css/bootstrap.min.css"
+          integrity="sha384-rwoIResjU2yc3z8GV/NPeZWAv56rSmLldC3R/AZzGRnGxQQKnKkoFVhFQhNUwEyJ"
+          crossorigin="anonymous">
+</head>
+<body>
+    <div class="container">
+        <div class="row">
+            <div class="col">
+            <h1>ERL Bot</h1>
+
+            <div id="messages"></div>
+            <form>
+                <div class="row">
+                    <div class="col-10">
+                        <textarea id="newMessage" rows="3" class="form-control"></textarea>
+                    </div>
+                    <div class="col">
+                        <button type="submit" id="btnSend" class="btn btn-primary">SEND</button>
+                    </div>
+                </div>
+            </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.min.js"
+            integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
+            crossorigin="anonymous"></script>
+    <script>
+    $(function() {
+        var evtSource = new EventSource("/sse");
+        evtSource.onmessage = function (msg) {
+            $('#messages').append('<div>Bot: ' + msg.data + '</div>');
+        };
+
+        $('#btnSend').on('click', send);
+        $('#newMessage').on('keydown', function (e) {
+            if (e.keyCode === 13) {
+                send();
+                e.preventDefault();
+            }
+        });
+
+        function send () {
+            var msg = $('#newMessage').val();
+            $.post('/api/chat', {message: msg});
+            $('#messages').append('<div>You: ' + msg + '</div>');
+
+            $('#newMessage').val('');
+        }
+    });
+    </script>
+</body>
+</html>

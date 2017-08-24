@@ -17,7 +17,12 @@
 
 start(_StartType, _StartArgs) ->
     Dispatch = cowboy_router:compile([
-        {'_', [{"/", erlbot_http, []}]}
+      {'_', [
+        {"/", erlbot_http, []},
+        {"/api/:action", erlbot_http, []},
+        {"/sse", erlbot_sse, []},
+        {"/[...]", cowboy_static, {priv_dir, erlbot, "static"}}
+      ]}
     ]),
     cowboy:start_http(my_http_listener, 100, [{port, 8080}],
         [{env, [{dispatch, Dispatch}]}]

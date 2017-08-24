@@ -9,7 +9,7 @@
 
 %% API
 -export([start_link/0]).
--export([create_bot/1]).
+-export([create_bot/1, get_bot/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -31,6 +31,10 @@ create_bot(Username) ->
       restart => transient,
       type => worker
     }).
+
+get_bot(Username) ->
+  BotPid = global:whereis_name(Username),
+  {ok, BotPid}.
 
 %%====================================================================
 %% Supervisor callbacks
