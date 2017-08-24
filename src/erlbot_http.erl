@@ -23,19 +23,20 @@ handle(Req0, State) ->
 
   {ok, Req, State}.
 
-create_message(Req, State) ->
-  case cowboy_req:body_qs(Req) of
-    {ok, [{<<"message">>, Message}], Req2} ->
-      io:format("~p~n", [Message]),
+create_message(Req0, State) ->
+  case cowboy_req:body_qs(Req0) of
+    {ok, [{<<"message">>, Message}], Req1} ->
+      {Username, Req2} = cowboy_req:cookie(<<"username">>, Req1),
+      io:format("HTTP: Sending message ~p to ~p~n", [Message, Username]),
 
-      {ok, BotPid} = erlbot_sup:get_bot("Joe"),
+      {ok, BotPid} = erlbot_sup:get_bot(binary_to_list(Username)),
       erlbot_bot:tell(BotPid, binary_to_list(Message)),
 
       cowboy_req:reply(200, [
         {<<"content-type">>, <<"application/json; charset=utf-8">>}
       ], "OK", Req2);
 
-    _ -> invalid_action(Req, State)
+    _ -> invalid_action(Req0, State)
   end.
 
 index_page(Req0, State) ->

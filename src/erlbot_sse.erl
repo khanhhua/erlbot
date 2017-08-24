@@ -18,7 +18,7 @@
 -include("headers.hrl").
 
 init(_Type, Req0, _Opts) ->
-  {Username, Req1} = cowboy_req:cookie(<<"username">>, Req0, <<"Joe">>),
+  {Username, Req1} = cowboy_req:cookie(<<"username">>, Req0),
 
   case erlbot_sup:get_bot(binary_to_list(Username)) of
     {ok, undefined} ->
