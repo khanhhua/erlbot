@@ -161,13 +161,19 @@ listening(Message, Conversation) when is_record(Message, message)->
 
     case Message of
         #message{who=user, text="Bus how long"} ->
-          Conversation2 = reply("Lemme see....", Conversation),
-
-          Text = "15 minutes!",
+          Conversation2 = if
+            Conversation#conversation.topic =:= bus ->
+              Flow = Conversation#conversation.flow,
+              reply("I am working on it", Conversation#conversation{topic = bus});
+            true ->
+              Flow = erlbot_flow:get_flow("bus"),
+              reply("Lemme see....", Conversation#conversation{topic = bus, flow = Flow})
+          end,
+          FlowItem = erlbot_flow:get_current_flow_item(Flow),
+          Text = FlowItem#flow_item.question,
 
           Conversation3 = pick_up_message(Message, Conversation2),
-          Conversation4 = Conversation3#conversation{topic = bus},
-          Conversation5 = reply(Text, Conversation4),
+          Conversation5 = reply(Text, Conversation3),
           {next_state, guiding, Conversation5, 30000};
         _ -> {next_state, listening, Conversation#conversation{topic=undefined, messages = []}, 5000}
     end.
