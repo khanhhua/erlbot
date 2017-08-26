@@ -8,7 +8,8 @@
 -record(conversation, {id, username, topic, flow, messages=[], subscribers=[]}).
 -record(message, {who, text}).
 
--record(flow, {items, current_item, entities=#{}}).
--record(flow_item, {question, action, entity}).
--record(optional_flow_item, {trigger, question, action, entity}).
+-record(flow, {items, current_item, entities=#{}, current_answer}).
+-record(flow_item_interactive, {question, entity, trigger}).
+-record(flow_item_auto, {action, entity, answer, trigger}).
 -record(flow_trigger, {method, op}).
+-record(entity, {name :: iolist(), value :: term()}).

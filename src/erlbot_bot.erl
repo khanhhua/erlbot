@@ -170,7 +170,7 @@ listening(Message, Conversation) when is_record(Message, message)->
               reply("Lemme see....", Conversation#conversation{topic = bus, flow = Flow})
           end,
           FlowItem = erlbot_flow:get_current_flow_item(Flow),
-          Text = FlowItem#flow_item.question,
+          Text = FlowItem#flow_item_interactive.question,
 
           Conversation3 = pick_up_message(Message, Conversation2),
           Conversation5 = reply(Text, Conversation3),
