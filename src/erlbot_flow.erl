@@ -76,7 +76,6 @@ get_flow(FlowName) ->
 - spec get_current_flow_item(Flow :: term()) -> FlowItem when
   FlowItem :: term().
 get_current_flow_item(#flow{items=Items, current_item=CurrentItem}) ->
-%%  io:format("get_current_flow_item: ~p @ ~p", [Items, CurrentItem]),
   if
     length(Items) < CurrentItem -> undefined;
     true -> lists:nth(CurrentItem, Items)

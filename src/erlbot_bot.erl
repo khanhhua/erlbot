@@ -166,7 +166,7 @@ listening(Message, Conversation) when is_record(Message, message)->
               Flow = Conversation#conversation.flow,
               reply("I am working on it", Conversation#conversation{topic = bus});
             true ->
-              Flow = erlbot_flow:get_flow("bus"),
+              {ok, Flow} = erlbot_flow:get_flow("bus"),
               reply("Lemme see....", Conversation#conversation{topic = bus, flow = Flow})
           end,
           FlowItem = erlbot_flow:get_current_flow_item(Flow),
@@ -198,11 +198,27 @@ guiding(timeout, StateData) ->
 guiding(Message, Conversation) when is_record(Message, message) ->
   Conversation2 = pick_up_message(Message, Conversation),
 
-  Text = "I said 15 minutes!",
-  Conversation3 = reply(Text, Conversation2),
+  Flow = Conversation#conversation.flow,
 
-  io:format("Thank you for your information...~p~n", [Conversation3#conversation.messages]),
-  {next_state, listening, Conversation3#conversation{topic=undefined, messages = []}, 30000}.
+  Entity = case Message#message.text of
+             "AMK" -> #entity{name = "pointA", value = "AMK"};
+             "Orc" -> #entity{name = "pointB", value = "Orc"};
+             _ ->#entity{name = "pointB", value = "Orc"}
+           end,
+  {ok, Flow2} = erlbot_flow:update_flow(Flow, Entity),
+  CurrentFlowItem = erlbot_flow:get_current_flow_item(Flow2),
+
+  if
+   is_record(CurrentFlowItem, flow_item_interactive) ->
+     Text = CurrentFlowItem#flow_item_interactive.question,
+     Conversation3 = reply(Text, Conversation2#conversation{flow = Flow2}),
+     io:format("Thank you for your information...~p~n", [Conversation3#conversation.messages]),
+     {next_state, guiding, Conversation3, 30000};
+   true ->
+     Text = erlbot_flow:get_current_answer(Flow2),
+     Conversation3 = reply(Text, Conversation2#conversation{flow = Flow2}),
+     {next_state, listening, Conversation3#conversation{topic=undefined, messages = []}, 30000}
+  end.
 
 %% guiding/3
 %% ====================================================================
