@@ -13,3 +13,5 @@
 -record(flow_item_auto, {action, entity, answer, trigger}).
 -record(flow_trigger, {method, op}).
 -record(entity, {name :: iolist(), value :: term()}).
+
+-record(intent, {action::term(), parameters :: list()}).
