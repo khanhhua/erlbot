@@ -159,23 +159,41 @@ listening(Message, Conversation) when is_record(Message, message)->
     io:format("listening: ~p ~p ~n", [Message, Conversation#conversation.messages]),
     % If conversation has one reference to "bus", then begin to guide
 
-    case Message of
-        #message{who=user, text="Bus how long"} ->
+    #message{who=user, text=Text} = Message,
+    {ok, Intent} = erlbot_ai:query(Text),
+
+    case Intent of
+        #intent{action = "find_bus"} ->
           Conversation2 = if
-            Conversation#conversation.topic =:= bus ->
+            Conversation#conversation.context =:= bus ->
               Flow = Conversation#conversation.flow,
-              reply("I am working on it", Conversation#conversation{topic = bus});
+              reply("I am working on it", Conversation#conversation{context = bus});
             true ->
               {ok, Flow} = erlbot_flow:get_flow("bus"),
-              reply("Lemme see....", Conversation#conversation{topic = bus, flow = Flow})
+              reply("Lemme see....", Conversation#conversation{context = bus, flow = Flow})
           end,
-          FlowItem = erlbot_flow:get_current_flow_item(Flow),
-          Text = FlowItem#flow_item_interactive.question,
+          Parameters = #intent.parameters,
+          EntityNames = erlbot_flow:get_entity_names(Flow),
+
+          Entities = lists:foldl(
+            fun (EntityName, Entities0) ->
+              case proplists:get_value(EntityName, Parameters) of
+                undefined ->
+                  Entities0;
+                Value ->
+                  [#entity{name = EntityName, value = Value} | Entities0]
+              end
+            end,
+            [], EntityNames),
+
+          Flow2 = erlbot_flow:update_flow(Flow, Entities),
+          FlowItem = erlbot_flow:get_current_flow_item(Flow2),
+          Question = FlowItem#flow_item_interactive.question,
 
           Conversation3 = pick_up_message(Message, Conversation2),
-          Conversation5 = reply(Text, Conversation3),
+          Conversation5 = reply(Question, Conversation3),
           {next_state, guiding, Conversation5, 30000};
-        _ -> {next_state, listening, Conversation#conversation{topic=undefined, messages = []}, 5000}
+        _ -> {next_state, listening, Conversation#conversation{context =undefined, messages = []}, 5000}
     end.
     
 
@@ -217,7 +235,7 @@ guiding(Message, Conversation) when is_record(Message, message) ->
    true ->
      Text = erlbot_flow:get_current_answer(Flow2),
      Conversation3 = reply(Text, Conversation2#conversation{flow = Flow2}),
-     {next_state, listening, Conversation3#conversation{topic=undefined, messages = []}, 30000}
+     {next_state, listening, Conversation3#conversation{context =undefined, messages = []}, 30000}
   end.
 
 %% guiding/3

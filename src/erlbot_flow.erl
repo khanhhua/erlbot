@@ -11,7 +11,7 @@
 
 -include("headers.hrl").
 %% API
--export([get_flow/1, get_current_flow_item/1, update_flow/2, get_current_answer/1]).
+-export([get_flow/1, get_entity_names/1, get_current_flow_item/1, update_flow/2, get_current_answer/1]).
 
 -export([findBus/2, estimate/3]).
 
@@ -22,7 +22,7 @@ get_flow(FlowName) ->
 
   FlowsList = proplists:get_value("flow", FlowDefinition),
 
-  Flows = lists:map(fun (PropList) ->
+  FlowItems = lists:map(fun (PropList) ->
               case proplists:is_defined("optional", PropList) of
                 false ->
                   Question = proplists:get_value("question", PropList, undefined),
@@ -71,7 +71,7 @@ get_flow(FlowName) ->
               end
             end, FlowsList),
 
-  {ok, #flow{items = Flows, current_item = 1, entities = #{}, current_answer = undefined}}.
+  {ok, #flow{items = FlowItems, current_item = 1, entities = #{}, current_answer = undefined}}.
 
 - spec get_current_flow_item(Flow :: term()) -> FlowItem when
   FlowItem :: term().
@@ -117,6 +117,24 @@ update_flow(Flow, Entity) when is_record(Flow, flow) ->
   FlowOut = execute_loop(Flow2),
 
   {ok, FlowOut}.
+
+%% - Remove interactive questions from the flow,
+update_flow(Flow, [Entity|Entities]) ->
+  FlowOut = Flow#flow{
+    entities = maps:put(Entity#entity.name, Entity#entity.value, Flow#flow.entities),
+    items = lists:filter(
+      fun
+        (#flow_item_interactive{entity = EntityName}) -> EntityName =/= Entity#entity.name;
+        (_) -> true
+      end,
+      Flow#flow.items)
+    },
+
+  update_flow(FlowOut, Entities);
+update_flow(Flow, []) -> Flow.
+
+get_entity_names(#flow{items = FlowItems}) ->
+  lists:map(fun (#flow_item_interactive{entity = EntityName}) -> EntityName end, FlowItems).
 
 execute_loop(Flow) ->
   case get_current_flow_item(Flow) of

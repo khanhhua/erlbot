@@ -1,10 +1,10 @@
 name: bus
 flow:
   - question: 'Where are you now?'
-    entity: pointA
-  - question: Heading to?
-    entity: pointB
-  - action: findBus(pointA,pointB)
+    entity: current_location
+  - question: 'Heading to?'
+    entity: destination
+  - action: findBus(current_location,destination)
     entity: buses
   - optional:
       trigger:
@@ -13,6 +13,6 @@ flow:
       question: There are {{count(buses)}} buses. Which one?
       choices: buses
       entity: bus
-  - action: estimate(pointA,pointB,bus)
+  - action: estimate(current_location,destination,bus)
     entity: estimatedTime
     answer: Your bus will come in {{estimatedTime}}!
