@@ -41,11 +41,11 @@ query(Text) ->
 
   {ok, {{_Version, 200, _ReasonPhrase}, _NewHeaders, Body}} =
     httpc:request(get, {Url, Headers}, [], []),
-  %% io:format("Body: ~p ~n", [Body]),
 
   Data = jsx:decode(list_to_binary(Body)),
   Intent = generate_intent(Data),
 
+  io:format("Intent: ~p ~n", [Intent]),
   {ok, Intent}.
 
 generate_intent(Data) ->
@@ -53,4 +53,13 @@ generate_intent(Data) ->
   Action = proplists:get_value(<<"action">>, Result),
   Parameters = proplists:get_value(<<"parameters">>, Result),
 
-  #intent{action = Action, parameters = Parameters}.
+  io:format("Action: ~p Parameters: ~p", [Action, Parameters]),
+
+  #intent{
+    action = binary_to_list(Action),
+    parameters = lists:map(
+      fun ({Key, Value}) ->
+        {binary_to_list(Key), binary_to_list(Value)}
+      end,
+      Parameters)
+  }.

@@ -161,6 +161,7 @@ listening(Message, Conversation) when is_record(Message, message)->
 
     #message{who=user, text=Text} = Message,
     {ok, Intent} = erlbot_ai:query(Text),
+    io:format("Intent: ~p~n", [Intent]),
 
     case Intent of
         #intent{action = "find_bus"} ->
@@ -172,7 +173,7 @@ listening(Message, Conversation) when is_record(Message, message)->
               {ok, Flow} = erlbot_flow:get_flow("bus"),
               reply("Lemme see....", Conversation#conversation{context = bus, flow = Flow})
           end,
-          Parameters = #intent.parameters,
+          Parameters = Intent#intent.parameters,
           EntityNames = erlbot_flow:get_entity_names(Flow),
 
           Entities = lists:foldl(
@@ -187,13 +188,16 @@ listening(Message, Conversation) when is_record(Message, message)->
             [], EntityNames),
 
           Flow2 = erlbot_flow:update_flow(Flow, Entities),
+          Conversation3 = Conversation2#conversation{flow = Flow2},
+          io:format("Flow: ~p~n", [Flow2]),
+
           FlowItem = erlbot_flow:get_current_flow_item(Flow2),
           Question = FlowItem#flow_item_interactive.question,
 
-          Conversation3 = pick_up_message(Message, Conversation2),
-          Conversation5 = reply(Question, Conversation3),
-          {next_state, guiding, Conversation5, 30000};
-        _ -> {next_state, listening, Conversation#conversation{context =undefined, messages = []}, 5000}
+          Conversation4 = pick_up_message(Message, Conversation3),
+          ConversationOut = reply(Question, Conversation4),
+          {next_state, guiding, ConversationOut, 30000};
+        _ -> {next_state, listening, Conversation#conversation{context = undefined, messages = []}, 5000}
     end.
     
 
@@ -217,19 +221,22 @@ guiding(Message, Conversation) when is_record(Message, message) ->
   Conversation2 = pick_up_message(Message, Conversation),
 
   Flow = Conversation#conversation.flow,
+  Text = Message#message.text,
+  {ok, Flow2} = case erlbot_ai:query(Text) of
+    #intent{action = "declare_current_location", parameters = Parameters} ->
+      Entity = #entity{
+        name = "current_location",
+        value = proplists:get_value("current_location", Parameters)},
+      erlbot_flow:update_flow(Flow, Entity);
+    _ -> {ok, Flow}
+  end,
 
-  Entity = case Message#message.text of
-             "AMK" -> #entity{name = "pointA", value = "AMK"};
-             "Orc" -> #entity{name = "pointB", value = "Orc"};
-             _ ->#entity{name = "pointB", value = "Orc"}
-           end,
-  {ok, Flow2} = erlbot_flow:update_flow(Flow, Entity),
   CurrentFlowItem = erlbot_flow:get_current_flow_item(Flow2),
 
   if
    is_record(CurrentFlowItem, flow_item_interactive) ->
-     Text = CurrentFlowItem#flow_item_interactive.question,
-     Conversation3 = reply(Text, Conversation2#conversation{flow = Flow2}),
+     Question = CurrentFlowItem#flow_item_interactive.question,
+     Conversation3 = reply(Question, Conversation2#conversation{flow = Flow2}),
      io:format("Thank you for your information...~p~n", [Conversation3#conversation.messages]),
      {next_state, guiding, Conversation3, 30000};
    true ->

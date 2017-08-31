@@ -109,14 +109,14 @@ get_current_answer(#flow{current_answer = CurrentAnswer}) ->
   Flow2 :: term(),
   Reason :: normal | term().
 %% ====================================================================
-update_flow(Flow, Entity) when is_record(Flow, flow) ->
-%%  io:format("~p~n", [Flow#flow.items]),
+update_flow(Flow, Entity) when is_record(Flow, flow), is_record(Entity, entity) ->
+  io:format("update_flow ~p~n", [Flow#flow.items]),
   FlowItem = get_current_flow_item(Flow),
 
   Flow2 = execute_flow_item(Flow, FlowItem, Entity),
   FlowOut = execute_loop(Flow2),
 
-  {ok, FlowOut}.
+  {ok, FlowOut};
 
 %% - Remove interactive questions from the flow,
 update_flow(Flow, [Entity|Entities]) ->
@@ -134,7 +134,12 @@ update_flow(Flow, [Entity|Entities]) ->
 update_flow(Flow, []) -> Flow.
 
 get_entity_names(#flow{items = FlowItems}) ->
-  lists:map(fun (#flow_item_interactive{entity = EntityName}) -> EntityName end, FlowItems).
+  lists:foldl(
+    fun
+      (#flow_item_interactive{entity = EntityName}, Acc0) -> [EntityName|Acc0];
+      (_, Acc0) -> Acc0
+    end,
+    [], FlowItems).
 
 execute_loop(Flow) ->
   case get_current_flow_item(Flow) of
@@ -164,7 +169,11 @@ execute_flow_item(Flow, FlowItem, Entity) when is_record(FlowItem, flow_item_int
       true
   end,
 
-  if
+  io:format("erbot_flow:execute_flow_item Executing flow item...~n"),
+  io:format("erbot_flow:execute_flow_item FlowItem: ~p~n", [FlowItem]),
+  io:format("erbot_flow:execute_flow_item Entity: ~p~n", [Entity]),
+
+  FlowOut = if
     TriggerResult =:= false ->
       Flow#flow{current_item = Flow#flow.current_item + 1};
     true -> case {FlowItem#flow_item_interactive.entity, Entity#entity.value} of
@@ -176,7 +185,10 @@ execute_flow_item(Flow, FlowItem, Entity) when is_record(FlowItem, flow_item_int
       _ ->
         Flow
     end
-  end.
+  end,
+
+  io:format("erbot_flow:execute_flow_item Flow: ~p~n", [FlowOut]),
+  FlowOut.
 
 execute_flow_item(Flow, _FlowItem) ->
   Flow#flow{current_item = Flow#flow.current_item + 1}.
@@ -193,22 +205,22 @@ execute_action_flow_item(Flow, FlowItem) ->
     TriggerResult =:= false ->
       Flow#flow{current_item = Flow#flow.current_item + 1};
     true -> case FlowItem#flow_item_auto.action of
-      Action when Action =:= "findBus(pointA,pointB)" -> % TODO: Extract findBus, pointA, pointB
+      Action when Action =:= "findBus(current_location,destination)" -> % TODO: Extract findBus, pointA, pointB
         ActionMethodName = list_to_atom("findBus"),
         ActionEntityName = "buses",
-        PointA = maps:get("pointA", Flow#flow.entities),
-        PointB = maps:get("pointB", Flow#flow.entities),
+        PointA = maps:get("current_location", Flow#flow.entities),
+        PointB = maps:get("destination", Flow#flow.entities),
         {ok, ActionResult} = ?MODULE:ActionMethodName(PointA, PointB),
 
         Flow#flow{
           entities = maps:put(ActionEntityName, ActionResult, Flow#flow.entities),
           current_item = Flow#flow.current_item + 1
         };
-      Action when Action =:= "estimate(pointA,pointB,bus)" -> % TODO: Extract estimate Bus, pointA, pointB
+      Action when Action =:= "estimate(current_location,destination,bus)" -> % TODO: Extract estimate Bus, pointA, pointB
         ActionMethodName = list_to_atom("estimate"),
         ActionEntityName = "bus",
-        PointA = maps:get("pointA", Flow#flow.entities),
-        PointB = maps:get("pointB", Flow#flow.entities),
+        PointA = maps:get("current_location", Flow#flow.entities),
+        PointB = maps:get("destination", Flow#flow.entities),
         Bus = "Bus 269",% maps:get("bus", Flow#flow.entities),
         {ok, ActionResult} = ?MODULE:ActionMethodName(PointA, PointB,Bus),
         Flow#flow{
