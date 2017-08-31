@@ -110,7 +110,7 @@ get_current_answer(#flow{current_answer = CurrentAnswer}) ->
   Reason :: normal | term().
 %% ====================================================================
 update_flow(Flow, Entity) when is_record(Flow, flow), is_record(Entity, entity) ->
-  io:format("update_flow ~p~n", [Flow#flow.items]),
+  io:format("erbot_flow:update_flow Updating flow ~p~n", [Flow]),
   FlowItem = get_current_flow_item(Flow),
 
   Flow2 = execute_flow_item(Flow, FlowItem, Entity),

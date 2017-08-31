@@ -53,13 +53,14 @@ generate_intent(Data) ->
   Action = proplists:get_value(<<"action">>, Result),
   Parameters = proplists:get_value(<<"parameters">>, Result),
 
-  io:format("Action: ~p Parameters: ~p", [Action, Parameters]),
+  io:format("generate_intent~n- Action: ~p ~n- Parameters: ~p~n", [Action, Parameters]),
 
   #intent{
     action = binary_to_list(Action),
-    parameters = lists:map(
-      fun ({Key, Value}) ->
-        {binary_to_list(Key), binary_to_list(Value)}
+    parameters = lists:foldl(
+      fun
+        ({_Key, <<>>}, Acc0) -> Acc0;
+        ({Key, Value}, Acc0) -> [{binary_to_list(Key), binary_to_list(Value)},Acc0]
       end,
-      Parameters)
+      [], Parameters)
   }.

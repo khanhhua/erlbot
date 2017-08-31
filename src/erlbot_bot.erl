@@ -223,25 +223,34 @@ guiding(Message, Conversation) when is_record(Message, message) ->
   Flow = Conversation#conversation.flow,
   Text = Message#message.text,
   {ok, Flow2} = case erlbot_ai:query(Text) of
-    #intent{action = "declare_current_location", parameters = Parameters} ->
+    {ok, #intent{action = "declare_current_location", parameters = Parameters}} ->
+      io:format("erbot_bot:guiding - update_flow flow"),
       Entity = #entity{
         name = "current_location",
         value = proplists:get_value("current_location", Parameters)},
       erlbot_flow:update_flow(Flow, Entity);
-    _ -> {ok, Flow}
+    {ok, #intent{action = "declare_destination", parameters = Parameters}} ->
+      io:format("erbot_bot:guiding - update_flow flow"),
+      Entity = #entity{
+        name = "destination",
+        value = proplists:get_value("destination", Parameters)},
+      erlbot_flow:update_flow(Flow, Entity);
+    _ ->
+      io:format("erbot_bot:guiding - flow remains the same"),
+      {ok, Flow}
   end,
 
   CurrentFlowItem = erlbot_flow:get_current_flow_item(Flow2),
 
   if
    is_record(CurrentFlowItem, flow_item_interactive) ->
-     Question = CurrentFlowItem#flow_item_interactive.question,
-     Conversation3 = reply(Question, Conversation2#conversation{flow = Flow2}),
+     Response = CurrentFlowItem#flow_item_interactive.question,
+     Conversation3 = reply(Response, Conversation2#conversation{flow = Flow2}),
      io:format("Thank you for your information...~p~n", [Conversation3#conversation.messages]),
      {next_state, guiding, Conversation3, 30000};
    true ->
-     Text = erlbot_flow:get_current_answer(Flow2),
-     Conversation3 = reply(Text, Conversation2#conversation{flow = Flow2}),
+     Response = erlbot_flow:get_current_answer(Flow2),
+     Conversation3 = reply(Response, Conversation2#conversation{flow = Flow2}),
      {next_state, listening, Conversation3#conversation{context =undefined, messages = []}, 30000}
   end.
 
