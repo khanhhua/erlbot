@@ -11,7 +11,7 @@
 
 -include("headers.hrl").
 %% API
--export([query/1]).
+-export([query/2]).
 
 -define(end_point, "https://api.api.ai/v1/query").
 
@@ -19,12 +19,12 @@
 %% &query=Bus%20to%20Ang%20Mo%20Kio%20Avenue%204&lang=en&sessionId=1&timezone=Asia/Singapore'
 %% -H 'Authorization:Bearer ab8bc71108284909a45b9e86d4534e31'
 
-query(Text) ->
+query(Text, [{sessionId, SessionId}]) ->
   QueryParams = [
     {"v", "20150910"},
     {"lang", "en"},
     {"query", http_uri:encode(Text)},
-    {"sessionId", "1"},
+    {"sessionId", SessionId},
     {"timezone", "Asia/Singapore"}
   ],
   Headers = [

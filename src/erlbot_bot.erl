@@ -160,7 +160,7 @@ listening(Message, Conversation) when is_record(Message, message)->
     % If conversation has one reference to "bus", then begin to guide
 
     #message{who=user, text=Text} = Message,
-    {ok, Intent} = erlbot_ai:query(Text),
+    {ok, Intent} = erlbot_ai:query(Text, [{sessionId, Conversation#conversation.id}]),
     io:format("Intent: ~p~n", [Intent]),
 
     case Intent of
@@ -222,7 +222,7 @@ guiding(Message, Conversation) when is_record(Message, message) ->
 
   Flow = Conversation#conversation.flow,
   Text = Message#message.text,
-  {ok, Flow2} = case erlbot_ai:query(Text) of
+  {ok, Flow2} = case erlbot_ai:query(Text, [{sessionId, Conversation#conversation.id}]) of
     {ok, #intent{action = "declare_current_location", parameters = Parameters}} ->
       io:format("erbot_bot:guiding - update_flow flow"),
       Entity = #entity{
