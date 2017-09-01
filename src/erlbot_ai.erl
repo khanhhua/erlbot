@@ -51,12 +51,16 @@ query(Text, [{sessionId, SessionId}]) ->
 generate_intent(Data) ->
   Result = proplists:get_value(<<"result">>, Data),
   Action = proplists:get_value(<<"action">>, Result),
-  Parameters = proplists:get_value(<<"parameters">>, Result),
+  Parameters = proplists:get_value(<<"parameters">>, Result, []),
 
   io:format("generate_intent~n- Action: ~p ~n- Parameters: ~p~n", [Action, Parameters]),
 
   #intent{
-    action = binary_to_list(Action),
+    action =
+      case Action of
+        undefined -> unknown;
+        _ ->  binary_to_list(Action)
+      end,
     parameters = lists:foldl(
       fun
         ({_Key, <<>>}, Acc0) -> Acc0;

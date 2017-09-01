@@ -161,7 +161,6 @@ listening(Message, Conversation) when is_record(Message, message)->
 
     #message{who=user, text=Text} = Message,
     {ok, Intent} = erlbot_ai:query(Text, [{sessionId, Conversation#conversation.id}]),
-    io:format("Intent: ~p~n", [Intent]),
 
     case Intent of
         #intent{action = "find_bus"} ->
@@ -237,6 +236,7 @@ guiding(Message, Conversation) when is_record(Message, message) ->
       erlbot_flow:update_flow(Flow, Entity);
     _ ->
       io:format("erbot_bot:guiding - flow remains the same"),
+      reply("Sorry but I could not understand...", Conversation),
       {ok, Flow}
   end,
 
