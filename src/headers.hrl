@@ -5,7 +5,7 @@
 %% -Who: term() :: user, bot
 %% -What: binary
 
--record(conversation, {id, username, context, flow, messages=[], subscribers=[]}).
+-record(conversation, {id, username, context, flow, session, messages=[], subscribers=[]}).
 -record(message, {who, text}).
 
 -record(flow, {items, current_item, entities=#{}, current_answer}).

@@ -160,17 +160,18 @@ listening(Message, Conversation) when is_record(Message, message)->
     % If conversation has one reference to "bus", then begin to guide
 
     #message{who=user, text=Text} = Message,
-    {ok, Intent} = erlbot_ai:query(Text, [{sessionId, Conversation#conversation.id}]),
+    Conversation1 = Conversation#conversation{session = io_lib:format("~s-~p", [Conversation#conversation.id, os:system_time()])},
+    {ok, Intent} = erlbot_ai:query(Text, [{sessionId, Conversation1#conversation.session}]),
 
     case Intent of
         #intent{action = "find_bus"} ->
           Conversation2 = if
-            Conversation#conversation.context =:= bus ->
-              Flow = Conversation#conversation.flow,
-              reply("I am working on it", Conversation#conversation{context = bus});
+            Conversation1#conversation.context =:= bus ->
+              Flow = Conversation1#conversation.flow,
+              reply("I am working on it", Conversation1#conversation{context = bus});
             true ->
               {ok, Flow} = erlbot_flow:get_flow("bus"),
-              reply("Lemme see....", Conversation#conversation{context = bus, flow = Flow})
+              reply("Lemme see....", Conversation1#conversation{context = bus, flow = Flow})
           end,
           Parameters = Intent#intent.parameters,
           EntityNames = erlbot_flow:get_entity_names(Flow),
@@ -221,7 +222,7 @@ guiding(Message, Conversation) when is_record(Message, message) ->
 
   Flow = Conversation#conversation.flow,
   Text = Message#message.text,
-  {ok, Flow2} = case erlbot_ai:query(Text, [{sessionId, Conversation#conversation.id}]) of
+  {ok, Flow2} = case erlbot_ai:query(Text, [{sessionId, Conversation#conversation.session}]) of
     {ok, #intent{action = "declare_current_location", parameters = Parameters}} ->
       io:format("erbot_bot:guiding - update_flow flow"),
       Entity = #entity{
@@ -251,7 +252,7 @@ guiding(Message, Conversation) when is_record(Message, message) ->
    true ->
      Response = erlbot_flow:get_current_answer(Flow2),
      Conversation3 = reply(Response, Conversation2#conversation{flow = Flow2}),
-     {next_state, listening, Conversation3#conversation{context =undefined, messages = []}, 30000}
+     {next_state, listening, Conversation3#conversation{context = undefined, session = undefined, messages = []}, 30000}
   end.
 
 %% guiding/3

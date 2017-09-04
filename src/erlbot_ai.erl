@@ -91,6 +91,6 @@ generate_intent(Data, Context) ->
             undefined -> [{Key, Value} | Acc0];
             ContextDefinedValue -> [{Key, ContextDefinedValue} | Acc0]
           end
-        end, [], Intent#intent.parameters),
+        end, [], Parameters),
       Intent#intent{parameters = ContextualParameters}
   end.
