@@ -218,7 +218,7 @@ execute_action_flow_item(Flow, FlowItem) ->
         };
       Action when Action =:= "estimate(current_location,destination,bus)" -> % TODO: Extract estimate Bus, pointA, pointB
         ActionMethodName = list_to_atom("estimate"),
-        ActionEntityName = "bus",
+        ActionEntityName = "estimatedTime",
         PointA = maps:get("current_location", Flow#flow.entities),
         PointB = maps:get("destination", Flow#flow.entities),
         Bus = "Bus 269",% maps:get("bus", Flow#flow.entities),
@@ -231,14 +231,30 @@ execute_action_flow_item(Flow, FlowItem) ->
   end,
   if
     FlowItem#flow_item_auto.answer =/= undefined ->
-      io:format("FlowItem.answer: ~p ~n", [FlowItem#flow_item_auto.answer]),
+      ParameterizedAnswer = render(FlowItem#flow_item_auto.answer, Flow2#flow.entities),
+
+      io:format("FlowItem.answer: ~p ~n", [ParameterizedAnswer]),
       Flow2#flow{
-        current_answer = FlowItem#flow_item_auto.answer
+        current_answer = ParameterizedAnswer
       };
     true ->
       Flow2
   end.
 
+render(Template,EntitiesMap) ->
+  io:format("render::Entities ~p~n", [EntitiesMap]),
+
+  lists:foldl(
+    fun (Key, Acc0) ->
+      Value = maps:get(Key, EntitiesMap),
+      case Value of
+        {TimeValue, minutes} -> re:replace(Acc0, "{{"++Key++"}}", lists:flatten(io_lib:format("~w minutes", [TimeValue])), [{return,list}]);
+        _ -> Acc0
+      end
+    end
+  , Template, maps:keys(EntitiesMap)).
+
+%% Exported
 findBus(PointA,PointB) ->
   io:format("Finding buses from ~p to ~p~n", [PointA,PointB]),
   {ok, [
@@ -246,6 +262,7 @@ findBus(PointA,PointB) ->
     "Bus 130"
   ]}.
 
+%% Exported
 estimate(PointA,PointB,Bus) ->
   io:format("Estimating for Bus ~p from ~p to ~p~n", [Bus,PointA,PointB]),
   {ok, {10, minutes}}.
