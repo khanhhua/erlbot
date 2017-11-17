@@ -42,7 +42,16 @@ get_bot(Username) ->
 
 %% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
 init([]) ->
-  {ok, { {one_for_one, 0, 1}, []} }.
+  {ok, { {one_for_one, 0, 1}, [
+    #{
+      id => erlbot_bus,
+      start => {erlbot_bus, start_link, []},
+      restart => permanent,
+      shutdown => brutal_kill,
+      type => worker,
+      modules => []
+    }
+  ]} }.
 
 %%====================================================================
 %% Internal functions
