@@ -13,7 +13,8 @@
 %% API
 -export([query/2]).
 
--define(end_point, "https://api.api.ai/v1/query").
+-define(end_point, "https://api.dialogflow.com/v1/query").
+%% https://dialogflow.com/docs/reference/agent/query
 
 %% ?v=20150910
 %% &query=Bus%20to%20Ang%20Mo%20Kio%20Avenue%204&lang=en&sessionId=1&timezone=Asia/Singapore'
