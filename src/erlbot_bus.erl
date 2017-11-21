@@ -30,7 +30,7 @@
 -define(API_BUS_ARRIVAL, "http://datamall2.mytransport.sg/ltaodataservice/BusArrivalv2"). %% ?BusStopCode=83139
 
 -record(state, { bus_stops, bus_routes }).
--record(bus_stop, {bus_stop_code, service_nos}).
+-record(bus_stop, {bus_stop_code, service_nos, next_stops}). %% next_stops :: [ {bus_stop_code, [service_no1, service_no2...]}, ... ]
 -record(bus_route, {service_no, forward_bus_stop_codes, reverse_bus_stop_codes}).
 
 %%%===================================================================
@@ -96,7 +96,8 @@ init([]) ->
   BusStops = lists:map(fun (Item) ->
                         #bus_stop{
                           bus_stop_code = binary_to_list(maps:get(<<"BusStopCode">>, Item)),
-                          service_nos = []
+                          service_nos = [],
+                          next_stops = []
                         }
                       end, maps:get(<<"value">>, Data)),
   io:format("DONE Updating bus stops database from DataMall SG (r). Total stops: ~w...~n", [length(BusStops)]),
@@ -104,43 +105,65 @@ init([]) ->
   io:format("Updating bus routes database from DataMall SG (r)...~n"),
   {ok, BusRoutesRaw} = file:read_file("/Users/khanhhua/dev/erlbot/priv/bus-data/bus_routes-20171020.csv"),
   [_ | BusRoutesLines] = binary:split(BusRoutesRaw, [<<"\n">>], [global]),
-  BusRoutes = lists:foldl(
+  {BusRoutes, BusStops2} = lists:foldl(
     fun (<<"">>, Acc0) -> Acc0; %% EOF
-    (Line, Acc0) ->
+    (Line, {Routes0, BusStops0}) ->
       %% csv columns :: BusStopCode ServiceNo   Direction    StopSequence
 
-      [BusStopCode, ServiceNo, Direction, _StopSequence] = binary:split(Line, [<<"\t">>], [global]),
+      [BusStopCode_, ServiceNo_, Direction, _StopSequence] = binary:split(Line, [<<"\t">>], [global]),
+      BusStopCode = binary_to_list(BusStopCode_),
+      ServiceNo = binary_to_list(ServiceNo_),
 
-      {Route0, Acc1} = case maps:is_key(ServiceNo, Acc0) of
+      {Route0, Routes1} = case maps:is_key(ServiceNo, Routes0) of
         true ->
-          {maps:get(ServiceNo, Acc0), Acc0};
+          {maps:get(ServiceNo, Routes0), Routes0};
         _ ->
           NewRoute = #bus_route{
-            service_no = binary_to_list(ServiceNo),
+            service_no = ServiceNo,
             forward_bus_stop_codes = [],
             reverse_bus_stop_codes = []
           },
-          {NewRoute, maps:put(binary_to_list(ServiceNo), NewRoute, Acc0)}
+          {NewRoute, maps:put(ServiceNo, NewRoute, Routes0)}
       end,
 
-      Route1 = case Direction of
-                 <<"1">> -> Route0#bus_route{forward_bus_stop_codes = lists:append(Route0#bus_route.forward_bus_stop_codes, [binary_to_list(BusStopCode)])};
-                 <<"2">> -> Route0#bus_route{reverse_bus_stop_codes = lists:append(Route0#bus_route.reverse_bus_stop_codes, [binary_to_list(BusStopCode)])}
-               end,
+      UpdateBusStops = fun ([], BusStops_) -> BusStops_; (BusStopCodes, BusStops_) ->
+        LastBusStopCode = lists:last(BusStopCodes),
+        io:format("LastBusStopCode: ~p~n", [LastBusStopCode]),
 
-      maps:put(binary_to_list(ServiceNo), Route1, Acc1)
-    end, #{}, BusRoutesLines),
+        case lists:keyfind(LastBusStopCode, #bus_stop.bus_stop_code, BusStops_) of
+          false ->
+            io:format("Could not find ~p in BusStops~n", [LastBusStopCode]),
+            BusStops_;
+          LastBusStop -> case lists:keyfind(BusStopCode, 1, LastBusStop#bus_stop.next_stops) of
+            {BusStopCode, ServiceNos} ->
+              io:format("LastBusStop: ~p~n", [LastBusStop]),
+              io:format("ServiceNos: ~p~n", [ServiceNos]),
+              LastBusStop#bus_stop{
+                next_stops = lists:keyreplace(BusStopCode, 1, LastBusStop#bus_stop.next_stops, {BusStopCode, [ServiceNo|ServiceNos]})
+              };
+            false -> {BusStopCode, [ServiceNo]}
+          end,
+          lists:keyreplace(LastBusStopCode, #bus_stop.bus_stop_code, BusStops_, LastBusStop)
+        end
+      end,
 
-  BusStops2 = lists:map(
-    fun (BusStop) ->
-      lists:foldl(
-        fun (Route, BusStop0) ->
-          case lists:member(BusStop#bus_stop.bus_stop_code, Route#bus_route.forward_bus_stop_codes) of
-            true -> BusStop0#bus_stop{service_nos = [ Route#bus_route.service_no | BusStop0#bus_stop.service_nos]};
-            _ -> BusStop0
-          end
-        end, BusStop, maps:values(BusRoutes))
-    end, BusStops),
+      {Route1, BusStops1} = case Direction of
+         <<"1">> ->
+           {
+             Route0#bus_route{forward_bus_stop_codes = lists:append(Route0#bus_route.forward_bus_stop_codes, [BusStopCode])},
+             UpdateBusStops(Route0#bus_route.forward_bus_stop_codes, BusStops0)
+           };
+         <<"2">> ->
+           {
+             Route0#bus_route{reverse_bus_stop_codes = lists:append(Route0#bus_route.reverse_bus_stop_codes, [BusStopCode])},
+             UpdateBusStops(Route0#bus_route.reverse_bus_stop_codes, BusStops0)
+           }
+      end,
+      {
+        maps:put(ServiceNo, Route1, Routes1),
+        BusStops1
+      }
+    end, {#{}, BusStops}, BusRoutesLines),
 
   io:format("DONE Updating bus routes database from DataMall SG (r). Total routes: ~w...~n", [maps:size(BusRoutes)]),
   io:format("Bus stops: ~p~n", [BusStops2]),
