@@ -81,25 +81,20 @@ estimate(PointA,PointB,Bus) ->
   {stop, Reason :: term()} | ignore).
 init([]) ->
   io:format("Updating bus stops database from DataMall SG (r)...~n"),
-  Headers = [
-    {"AccountKey", "fATyZro1T0qJr07ERUf5IA=="}
-  ],
+  {ok, BusStopsRaw} = file:read_file("/Users/khanhhua/dev/erlbot/priv/bus-data/bus_stops-20171020.csv"),
 
-  Url = ?API_BUS_STOPS,
+  [_ | BusStopsLines] = binary:split(BusStopsRaw, [<<"\n">>], [global]),
 
-  io:format("Requesting ~p~n", [Url]),
+  BusStops = lists:foldl(
+    fun (<<"">>, Acc0) -> Acc0;
+    (Line, Acc0) ->
+      [BusStopCode, _RoadName, _Description] = binary:split(Line, [<<"\t">>], [global]),
 
-  {ok, {{_Version, 200, _ReasonPhrase}, _NewHeaders, Body}} =
-    httpc:request(get, {Url, Headers}, [], []),
-
-  Data = jsx:decode(list_to_binary(Body), [return_maps]),
-  BusStops = lists:map(fun (Item) ->
-                        #bus_stop{
-                          bus_stop_code = binary_to_list(maps:get(<<"BusStopCode">>, Item)),
-                          service_nos = [],
-                          next_stops = []
-                        }
-                      end, maps:get(<<"value">>, Data)),
+      [#bus_stop{
+          bus_stop_code = binary_to_list(BusStopCode),
+          service_nos = []
+        } | Acc0]
+    end, [], BusStopsLines),
   io:format("DONE Updating bus stops database from DataMall SG (r). Total stops: ~w...~n", [length(BusStops)]),
 
   io:format("Updating bus routes database from DataMall SG (r)...~n"),
@@ -303,3 +298,16 @@ handle_estimate(PointA, PointB, _Bus) ->
     end, [], maps:get("Services", PointBData)),
 
   ok.
+
+find_routes(BusRoutes, BusStops, BusStopCodeA, BusStopCodeB) ->
+  BusStopA = maps:get(BusStopCodeA, BusStops),
+  ServiceNos = BusStopA#bus_stop.service_nos,
+
+  if
+    length(ServiceNos) =:= 0 -> [];
+    true -> lists:map(
+      fun (ServiceNo) ->
+        ok
+      end,
+      ServiceNos)
+  end.

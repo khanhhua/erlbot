@@ -8,15 +8,15 @@ headers = {
     'accept' : 'application/json'
 } #this is by default
 
-with open("bus_routes-20171020.csv","w+") as outfile:
+with open("bus_stops.csv","w+") as outfile:
     #API parameters
     skip = 0
 
-    print 'Downloading bus routes...'
+    print 'Downloading bus stops...'
     while True:
         print 'Page %d\n' % (skip / 500 + 1)
         uri = 'http://datamall2.mytransport.sg/' #Resource URL
-        path = '/ltaodataservice/BusRoutes?$skip=%d' % skip
+        path = 'ltaodataservice/BusStops?$skip=%d' % skip
 
         target = urlparse(uri + path)
         print target.geturl()
@@ -38,6 +38,6 @@ with open("bus_routes-20171020.csv","w+") as outfile:
             break
 
         for obj in jsonObj['value']:
-            outfile.write("{BusStopCode}\t{ServiceNo}\t{Direction}\t{StopSequence}\n".format(**obj))
+            outfile.write("{BusStopCode}\t{RoadName}\t{Description}\n".format(**obj))
 
         skip += 500
