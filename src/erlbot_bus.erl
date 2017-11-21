@@ -81,24 +81,20 @@ estimate(PointA,PointB,Bus) ->
   {stop, Reason :: term()} | ignore).
 init([]) ->
   io:format("Updating bus stops database from DataMall SG (r)...~n"),
-  Headers = [
-    {"AccountKey", "fATyZro1T0qJr07ERUf5IA=="}
-  ],
+  {ok, BusStopsRaw} = file:read_file("/Users/khanhhua/dev/erlbot/priv/bus-data/bus_stops-20171020.csv"),
 
-  Url = ?API_BUS_STOPS,
+  [_ | BusStopsLines] = binary:split(BusStopsRaw, [<<"\n">>], [global]),
 
-  io:format("Requesting ~p~n", [Url]),
+  BusStops = lists:foldl(
+    fun (<<"">>, Acc0) -> Acc0;
+    (Line, Acc0) ->
+      [BusStopCode, _RoadName, _Description] = binary:split(Line, [<<"\t">>], [global]),
 
-  {ok, {{_Version, 200, _ReasonPhrase}, _NewHeaders, Body}} =
-    httpc:request(get, {Url, Headers}, [], []),
-
-  Data = jsx:decode(list_to_binary(Body), [return_maps]),
-  BusStops = lists:map(fun (Item) ->
-                        #bus_stop{
-                          bus_stop_code = binary_to_list(maps:get(<<"BusStopCode">>, Item)),
-                          service_nos = []
-                        }
-                      end, maps:get(<<"value">>, Data)),
+      [#bus_stop{
+          bus_stop_code = binary_to_list(BusStopCode),
+          service_nos = []
+        } | Acc0]
+    end, [], BusStopsLines),
   io:format("DONE Updating bus stops database from DataMall SG (r). Total stops: ~w...~n", [length(BusStops)]),
 
   io:format("Updating bus routes database from DataMall SG (r)...~n"),
@@ -131,22 +127,24 @@ init([]) ->
       maps:put(binary_to_list(ServiceNo), Route1, Acc1)
     end, #{}, BusRoutesLines),
 
-  BusStops2 = lists:map(
-    fun (BusStop) ->
-      lists:foldl(
+  BusStops2 = lists:foldl(
+    fun (BusStop, Acc0) ->
+      BusStop1 = lists:foldl(
         fun (Route, BusStop0) ->
           case lists:member(BusStop#bus_stop.bus_stop_code, Route#bus_route.forward_bus_stop_codes) of
             true -> BusStop0#bus_stop{service_nos = [ Route#bus_route.service_no | BusStop0#bus_stop.service_nos]};
             _ -> BusStop0
           end
-        end, BusStop, maps:values(BusRoutes))
-    end, BusStops),
+        end, BusStop, maps:values(BusRoutes)),
 
-  io:format("DONE Updating bus routes database from DataMall SG (r). Total routes: ~w...~n", [maps:size(BusRoutes)]),
-  io:format("Bus stops: ~p~n", [BusStops2]),
+      maps:put(BusStop1#bus_stop.bus_stop_code, BusStop1, Acc0)
+    end, #{}, BusStops),
+  BusStops3 = maps:filter(fun (_K, BusStop) -> length(BusStop#bus_stop.service_nos) > 0 end, BusStops2),
+
+  io:format("DONE Updating bus routes database from DataMall SG (r). Total routes: ~w...~n", [maps:size(BusStops3)]),
 
   {ok, #state{
-    bus_stops = BusStops2,
+    bus_stops = BusStops3,
     bus_routes = BusRoutes
   }}.
 
@@ -266,17 +264,30 @@ handle_estimate(PointA, PointB, _Bus) ->
       } | Acc0]
     end, [], maps:get("Services", PointAData)),
 
-  {ok, {{_Version, 200, _ReasonPhrase}, _NewHeaders, Body}} =
-    httpc:request(get, {?API_BUS_ARRIVAL ++ "?BusStopCode=" ++ PointB, Headers}, [], []),
-  PointBData = jsx:decode(list_to_binary(Body), [returns_map]),
-  BusesToPointB = lists:foldl(
-    fun (Item, Acc0) ->
-
-
-      [#{
-        service_no => maps:get("ServiceNo", Item),
-        eta => maps:get("EstimatedArrival", Item)
-      } | Acc0]
-    end, [], maps:get("Services", PointBData)),
+%%  {ok, {{_Version, 200, _ReasonPhrase}, _NewHeaders, Body}} =
+%%    httpc:request(get, {?API_BUS_ARRIVAL ++ "?BusStopCode=" ++ PointB, Headers}, [], []),
+%%  PointBData = jsx:decode(list_to_binary(Body), [returns_map]),
+%%  BusesToPointB = lists:foldl(
+%%    fun (Item, Acc0) ->
+%%
+%%
+%%      [#{
+%%        service_no => maps:get("ServiceNo", Item),
+%%        eta => maps:get("EstimatedArrival", Item)
+%%      } | Acc0]
+%%    end, [], maps:get("Services", PointBData)),
 
   ok.
+
+find_routes(BusRoutes, BusStops, BusStopCodeA, BusStopCodeB) ->
+  BusStopA = maps:get(BusStopCodeA, BusStops),
+  ServiceNos = BusStopA#bus_stop.service_nos,
+
+  if
+    length(ServiceNos) =:= 0 -> [];
+    true -> lists:map(
+      fun (ServiceNo) ->
+        ok
+      end,
+      ServiceNos)
+  end.
