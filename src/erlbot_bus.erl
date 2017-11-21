@@ -30,8 +30,8 @@
 -define(API_BUS_ARRIVAL, "http://datamall2.mytransport.sg/ltaodataservice/BusArrivalv2"). %% ?BusStopCode=83139
 
 -record(state, { bus_stops, bus_routes }).
--record(bus_stop, {bus_stop_code, service_nos, next_stops}). %% next_stops :: [ {bus_stop_code, [service_no1, service_no2...]}, ... ]
--record(bus_route, {service_no, forward_bus_stop_codes, reverse_bus_stop_codes}).
+-record(bus_stop, {bus_stop_code, service_nos = [], next_stops = []}). %% next_stops :: [ {bus_stop_code, [service_no1, service_no2...]}, ... ]
+-record(bus_route, {service_no, forward_bus_stop_codes = [], reverse_bus_stop_codes = []}).
 
 %%%===================================================================
 %%% API
@@ -123,22 +123,27 @@ init([]) ->
 
       UpdateBusStops = fun ([], BusStops_) -> BusStops_; (BusStopCodes, BusStops_) ->
         LastBusStopCode = lists:last(BusStopCodes),
-        io:format("LastBusStopCode: ~p~n", [LastBusStopCode]),
 
         case lists:keyfind(LastBusStopCode, #bus_stop.bus_stop_code, BusStops_) of
           false ->
-            io:format("Could not find ~p in BusStops~n", [LastBusStopCode]),
             BusStops_;
-          LastBusStop -> case lists:keyfind(BusStopCode, 1, LastBusStop#bus_stop.next_stops) of
-            {BusStopCode, ServiceNos} ->
-              io:format("LastBusStop: ~p~n", [LastBusStop]),
-              io:format("ServiceNos: ~p~n", [ServiceNos]),
-              LastBusStop#bus_stop{
-                next_stops = lists:keyreplace(BusStopCode, 1, LastBusStop#bus_stop.next_stops, {BusStopCode, [ServiceNo|ServiceNos]})
-              };
-            false -> {BusStopCode, [ServiceNo]}
-          end,
-          lists:keyreplace(LastBusStopCode, #bus_stop.bus_stop_code, BusStops_, LastBusStop)
+
+          LastBusStop when length(LastBusStop#bus_stop.next_stops) =:= 0 ->
+            LastBusStop1 = LastBusStop#bus_stop{ next_stops = [{BusStopCode, [ServiceNo]}] },
+            lists:keyreplace(LastBusStopCode, #bus_stop.bus_stop_code, BusStops_, LastBusStop1);
+
+          LastBusStop ->
+            LastBusStop1 = case lists:keyfind(BusStopCode, 1, LastBusStop#bus_stop.next_stops) of
+              {BusStopCode, ServiceNos} ->
+                LastBusStop#bus_stop{
+                  next_stops = lists:keyreplace(BusStopCode, 1, LastBusStop#bus_stop.next_stops, {BusStopCode, [ServiceNo|ServiceNos]})
+                };
+              false ->
+                LastBusStop#bus_stop{
+                  next_stops = lists:append(LastBusStop#bus_stop.next_stops, [{BusStopCode, [ServiceNo]}])
+                }
+            end,
+            lists:keyreplace(LastBusStopCode, #bus_stop.bus_stop_code, BusStops_, LastBusStop1)
         end
       end,
 
