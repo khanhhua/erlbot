@@ -129,18 +129,20 @@ init([]) ->
             BusStops_;
 
           LastBusStop when length(LastBusStop#bus_stop.next_stops) =:= 0 ->
-            LastBusStop1 = LastBusStop#bus_stop{ next_stops = [{BusStopCode, [ServiceNo]}] },
+            LastBusStop1 = LastBusStop#bus_stop{ next_stops = [{BusStopCode, [ServiceNo]}], service_nos = [ServiceNo] },
             lists:keyreplace(LastBusStopCode, #bus_stop.bus_stop_code, BusStops_, LastBusStop1);
 
           LastBusStop ->
             LastBusStop1 = case lists:keyfind(BusStopCode, 1, LastBusStop#bus_stop.next_stops) of
               {BusStopCode, ServiceNos} ->
                 LastBusStop#bus_stop{
-                  next_stops = lists:keyreplace(BusStopCode, 1, LastBusStop#bus_stop.next_stops, {BusStopCode, [ServiceNo|ServiceNos]})
+                  next_stops = lists:keyreplace(BusStopCode, 1, LastBusStop#bus_stop.next_stops, {BusStopCode, [ServiceNo|ServiceNos]}),
+                  service_nos = [ServiceNo | LastBusStop#bus_stop.service_nos]
                 };
               false ->
                 LastBusStop#bus_stop{
-                  next_stops = lists:append(LastBusStop#bus_stop.next_stops, [{BusStopCode, [ServiceNo]}])
+                  next_stops = lists:append(LastBusStop#bus_stop.next_stops, [{BusStopCode, [ServiceNo]}]),
+                  service_nos = [ServiceNo | LastBusStop#bus_stop.service_nos]
                 }
             end,
             lists:keyreplace(LastBusStopCode, #bus_stop.bus_stop_code, BusStops_, LastBusStop1)
@@ -191,7 +193,7 @@ init([]) ->
 handle_call(Request, _From, State) ->
   case Request of
     {estimate, PointA, PointB, Bus} ->
-      {ok, Estimation} = handle_estimate(PointA, PointB, Bus),
+      {ok, Estimation} = handle_estimate(State#state.bus_stops, State#state.bus_routes, PointA, PointB, Bus),
       {reply, {ok, Estimation}, State};
     _ -> {reply, ok, State}
   end.
@@ -271,9 +273,9 @@ code_change(_OldVsn, State, _Extra) ->
 %% @spec handle_estimate(PointA, PointB, Bus) -> {ok, Estimation}
 %% @end
 %%--------------------------------------------------------------------
--spec(handle_estimate(PointA :: string(), PointB :: string(), Bus :: string()) ->
+-spec(handle_estimate(BusStops :: term(), BusRoutes :: term(), PointA :: string(), PointB :: string(), Bus :: string()) ->
   {ok, Estimation :: term()}).
-handle_estimate(PointA, PointB, _Bus) ->
+handle_estimate(BusStops, BusRoutes, PointA, PointB, Bus) ->
   Headers = [
     {"AccountKey", "fATyZro1T0qJr07ERUf5IA=="}
   ],
@@ -291,6 +293,9 @@ handle_estimate(PointA, PointB, _Bus) ->
 
   {ok, {{_Version, 200, _ReasonPhrase}, _NewHeaders, Body}} =
     httpc:request(get, {?API_BUS_ARRIVAL ++ "?BusStopCode=" ++ PointB, Headers}, [], []),
+
+  Routes = find_routes(BusStops, BusRoutes, PointA, PointB, Bus),
+
   PointBData = jsx:decode(list_to_binary(Body), [returns_map]),
   BusesToPointB = lists:foldl(
     fun (Item, Acc0) ->
@@ -304,15 +309,39 @@ handle_estimate(PointA, PointB, _Bus) ->
 
   ok.
 
-find_routes(BusRoutes, BusStops, BusStopCodeA, BusStopCodeB) ->
-  BusStopA = maps:get(BusStopCodeA, BusStops),
-  ServiceNos = BusStopA#bus_stop.service_nos,
+%%----------------------------------------------------------------
+%% @doc
+%% @returns one best route as an array of bus stops
+%% @end
+%%----------------------------------------------------------------
+find_routes(BusStops, BusRoutes, BusStopCodeA, BusStopCodeB, _Bus) ->
+  Find = fun
+    (SearchedCode, [SearchedCode|_], Transits) -> Transits; %% Terminal condition
+    (SearchedCode, [], _Transits) -> notfound;
+    (SearchedCode, BusStopCodes, Transits) when length(Transits) =:= 6 -> transit_issue;
+    (SearchedCode, BusStopCodes, Transits) ->
+      lists:foldl(
+        fun (BusStopCode, Transits0) ->
+          BusStop = lists:keyfind(BusStopCode, #bus_stop.bus_stop_code, BusStops),
+          NextBusStopCodes = lists:map(fun ({BusStopCode, _}) -> BusStopCode end, BusStop#bus_stop.next_stops),
 
-  if
-    length(ServiceNos) =:= 0 -> [];
-    true -> lists:map(
-      fun (ServiceNo) ->
-        ok
-      end,
-      ServiceNos)
-  end.
+          Find(SearchedCode, NextBusStopCodes, lists:append(Transits, [SearchedCode]))
+        end, Transits, BusStopCodes);
+    (_, _, notfound) -> notfound;
+    (_, _, transit_issue) -> transit_issue
+  end,
+
+  BusStopA = lists:keyfind(BusStopCodeA, #bus_stop.bus_stop_code, BusStops),
+   lists:foldl(
+     fun (ServiceNo, Acc0) ->
+       Route = maps:get(ServiceNo, BusRoutes),
+       case lists:member(BusStopCodeB, Route#bus_route.forward_bus_stop_codes) of
+         true -> Route#bus_route.forward_bus_stop_codes;
+         _ -> Acc0
+       end
+     end, [], BusStopA#bus_stop.service_nos),
+
+  NextBusStopCodes = lists:map(fun ({BusStopCode, _}) -> BusStopCode end, BusStopA#bus_stop.next_stops),
+  case Find(BusStopCodeB, NextBusStopCodes, []) of
+    Routes -> Routes;
+    _ -> [].
