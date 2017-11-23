@@ -81,6 +81,7 @@ estimate(PointA,PointB,Bus) ->
   {stop, Reason :: term()} | ignore).
 init([]) ->
   io:format("Updating bus stops database from DataMall SG (r)...~n"),
+  %% filename:join(code:priv_dir(erlbot), bus-data/bus_stops-20171020.csv)
   {ok, BusStopsRaw} = file:read_file("/Users/khanhhua/dev/erlbot/priv/bus-data/bus_stops-20171020.csv"),
 
   [_ | BusStopsLines] = binary:split(BusStopsRaw, [<<"\n">>], [global]),
@@ -168,7 +169,6 @@ init([]) ->
     end, {#{}, BusStops}, BusRoutesLines),
 
   io:format("DONE Updating bus routes database from DataMall SG (r). Total routes: ~w...~n", [maps:size(BusRoutes)]),
-  io:format("Bus stops: ~p~n", [BusStops2]),
 
   {ok, #state{
     bus_stops = BusStops2,
@@ -282,32 +282,21 @@ handle_estimate(BusStops, BusRoutes, PointA, PointB, Bus) ->
 
   {ok, {{_Version, 200, _ReasonPhrase}, _NewHeaders, Body}} =
     httpc:request(get, {?API_BUS_ARRIVAL ++ "?BusStopCode=" ++ PointA, Headers}, [], []),
-  PointAData = jsx:decode(list_to_binary(Body), [returns_map]),
-  BusesToPointA = lists:foldl(
-    fun (Item, Acc0) ->
-      [#{
-        service_no => maps:get("ServiceNo", Item),
-        eta => maps:get("EstimatedArrival", Item)
-      } | Acc0]
-    end, [], maps:get("Services", PointAData)),
-
-  {ok, {{_Version, 200, _ReasonPhrase}, _NewHeaders, Body}} =
-    httpc:request(get, {?API_BUS_ARRIVAL ++ "?BusStopCode=" ++ PointB, Headers}, [], []),
+  PointAData = jsx:decode(list_to_binary(Body), [return_maps]),
+%%  BusesToPointA = lists:foldl(
+%%    fun (Item, Acc0) ->
+%%      [#{
+%%        service_no => maps:get(<<"ServiceNo">>, Item),
+%%        eta => maps:get(<<"EstimatedArrival">>, Item)
+%%      } | Acc0]
+%%    end, [], maps:get(<<"Services">>, PointAData)),
+%%
+%%  io:format("Arrival at A: ~p~n", [BusesToPointA]),
 
   Routes = find_routes(BusStops, BusRoutes, PointA, PointB, Bus),
+  io:format("Routes: ~p~n", [Routes]),
 
-  PointBData = jsx:decode(list_to_binary(Body), [returns_map]),
-  BusesToPointB = lists:foldl(
-    fun (Item, Acc0) ->
-
-
-      [#{
-        service_no => maps:get("ServiceNo", Item),
-        eta => maps:get("EstimatedArrival", Item)
-      } | Acc0]
-    end, [], maps:get("Services", PointBData)),
-
-  ok.
+  {ok, {10, minutes}}.
 
 %%----------------------------------------------------------------
 %% @doc
@@ -316,19 +305,35 @@ handle_estimate(BusStops, BusRoutes, PointA, PointB, Bus) ->
 %%----------------------------------------------------------------
 find_routes(BusStops, BusRoutes, BusStopCodeA, BusStopCodeB, _Bus) ->
   Find = fun
-    (SearchedCode, [SearchedCode|_], Transits) -> Transits; %% Terminal condition
-    (SearchedCode, [], _Transits) -> notfound;
-    (SearchedCode, BusStopCodes, Transits) when length(Transits) =:= 6 -> transit_issue;
-    (SearchedCode, BusStopCodes, Transits) ->
-      lists:foldl(
-        fun (BusStopCode, Transits0) ->
-          BusStop = lists:keyfind(BusStopCode, #bus_stop.bus_stop_code, BusStops),
-          NextBusStopCodes = lists:map(fun ({BusStopCode, _}) -> BusStopCode end, BusStop#bus_stop.next_stops),
+    Find (SearchedCode, [SearchedCode], Transits) -> lists:append(Transits, [SearchedCode]); %% Terminal condition
+    Find (SearchedCode, [SearchedCode|_], Transits) -> lists:append(Transits, [SearchedCode]); %% Terminal condition
+    Find (SearchedCode, [], _Transits) -> notfound;
+    Find (SearchedCode, BusStopCodes, Transits) when length(Transits) =:= 6 -> transit_issue;
+    Find (_, _, notfound) -> notfound;
+    Find (_, _, transit_issue) -> transit_issue;
+    Find (SearchedCode, BusStopCodes, Transits) ->
+      case lists:member(SearchedCode, BusStopCodes) of
+        false -> lists:foldl(
+          fun (BusStopCode, Transits0) ->
+            %% Walk the edges defined by bus routes (a map by service no)
 
-          Find(SearchedCode, NextBusStopCodes, lists:append(Transits, [SearchedCode]))
-        end, Transits, BusStopCodes);
-    (_, _, notfound) -> notfound;
-    (_, _, transit_issue) -> transit_issue
+            BusStop = lists:keyfind(BusStopCode, #bus_stop.bus_stop_code, BusStops),
+            BusRoutes = lists:map(fun (ServiceNo) ->
+                                    maps:get(ServiceNo, BusRoutes)
+                                  end, BusStop#bus_stop.service_nos),
+
+            case lists:foldl(
+                fun (BusRoute, NextTransits0) ->
+                  Find(SearchedCode, BusRoute#bus_route.forward_bus_stop_codes, NextTransits0)
+                end, Transits, BusRoutes) %% lists:foldl
+            of
+              [NextTransit] -> lists:append(Transits0, [NextTransit]);
+              NextTransits -> lists:append(Transits0, [NextTransits])
+            end
+          end, Transits, BusStopCodes); %% lists:foldl
+        true ->
+          lists:append(Transits, [SearchedCode])
+      end
   end,
 
   BusStopA = lists:keyfind(BusStopCodeA, #bus_stop.bus_stop_code, BusStops),
@@ -342,6 +347,7 @@ find_routes(BusStops, BusRoutes, BusStopCodeA, BusStopCodeB, _Bus) ->
      end, [], BusStopA#bus_stop.service_nos),
 
   NextBusStopCodes = lists:map(fun ({BusStopCode, _}) -> BusStopCode end, BusStopA#bus_stop.next_stops),
-  case Find(BusStopCodeB, NextBusStopCodes, []) of
-    Routes -> Routes;
-    _ -> [].
+  case Find(BusStopCodeB, NextBusStopCodes, [BusStopCodeA]) of
+    notfound -> [];
+    Routes -> Routes
+  end.

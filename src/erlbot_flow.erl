@@ -265,4 +265,5 @@ findBus(PointA,PointB) ->
 %% Exported
 estimate(PointA,PointB,Bus) ->
   io:format("Estimating for Bus ~p from ~p to ~p~n", [Bus,PointA,PointB]),
-  {ok, {10, minutes}}.
+  Estimation = erlbot_bus:estimate(PointA,PointB,Bus),
+  {ok, Estimation}.
