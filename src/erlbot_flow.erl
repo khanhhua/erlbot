@@ -120,6 +120,7 @@ update_flow(Flow, Entity) when is_record(Flow, flow), is_record(Entity, entity) 
 
 %% - Remove interactive questions from the flow,
 update_flow(Flow, [Entity|Entities]) ->
+  io:format("erbot_flow:update_flow Entities: ~p~n", [Entities]),
   FlowOut = Flow#flow{
     entities = maps:put(Entity#entity.name, Entity#entity.value, Flow#flow.entities),
     items = lists:filter(
@@ -131,9 +132,14 @@ update_flow(Flow, [Entity|Entities]) ->
     },
 
   update_flow(FlowOut, Entities);
-update_flow(Flow, []) -> Flow.
+update_flow(Flow, []) ->
+  FlowItem = get_current_flow_item(Flow),
+  FlowOut = execute_loop(Flow),
+
+  FlowOut.
 
 get_entity_names(#flow{items = FlowItems}) ->
+  io:format("FlowItems: ~p~n", [FlowItems]),
   lists:foldl(
     fun
       (#flow_item_interactive{entity = EntityName}, Acc0) -> [EntityName|Acc0];
@@ -221,7 +227,7 @@ execute_action_flow_item(Flow, FlowItem) ->
         ActionEntityName = "estimatedTime",
         PointA = maps:get("current_location", Flow#flow.entities),
         PointB = maps:get("destination", Flow#flow.entities),
-        Bus = "Bus 269",% maps:get("bus", Flow#flow.entities),
+        [Bus | _] = maps:get("buses", Flow#flow.entities),
         {ok, ActionResult} = ?MODULE:ActionMethodName(PointA, PointB,Bus),
         Flow#flow{
           entities = maps:put(ActionEntityName, ActionResult, Flow#flow.entities),
@@ -257,12 +263,11 @@ render(Template,EntitiesMap) ->
 %% Exported
 findBus(PointA,PointB) ->
   io:format("Finding buses from ~p to ~p~n", [PointA,PointB]),
-  {ok, [
-    "Bus 269",
-    "Bus 130"
-  ]}.
+  {ok, Buses} = erlbot_bus:find_buses(PointA,PointB),
+  {ok, Buses}.
 
 %% Exported
 estimate(PointA,PointB,Bus) ->
   io:format("Estimating for Bus ~p from ~p to ~p~n", [Bus,PointA,PointB]),
-  {ok, {10, minutes}}.
+  {ok, Estimation} = erlbot_bus:estimate(PointA,PointB,Bus),
+  {ok, Estimation}.
