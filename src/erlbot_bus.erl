@@ -14,7 +14,8 @@
 %% API
 -export([
   start_link/0,
-  estimate/3]).
+  estimate/3,
+  find_buses/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -61,6 +62,9 @@ start_link() ->
 %%--------------------------------------------------------------------
 estimate(PointA,PointB,Bus) ->
   gen_server:call(?SERVER, {estimate, PointA, PointB, Bus}).
+
+find_buses(PointA,PointB) ->
+  gen_server:call(?SERVER, {find_buses, PointA, PointB}).
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -192,6 +196,9 @@ init([]) ->
   {stop, Reason :: term(), NewState :: #state{}}).
 handle_call(Request, _From, State) ->
   case Request of
+    {find_buses, PointA, PointB} ->
+      {ok, Buses} = handle_find_buses(State#state.bus_stops, State#state.bus_routes, PointA, PointB),
+      {reply, {ok, Buses}, State};
     {estimate, PointA, PointB, Bus} ->
       {ok, Estimation} = handle_estimate(State#state.bus_stops, State#state.bus_routes, PointA, PointB, Bus),
       {reply, {ok, Estimation}, State};
@@ -310,34 +317,35 @@ handle_estimate(BusStops, BusRoutes, PointA, PointB, Bus) ->
 %% @returns one best route as an array of bus stops
 %% @end
 %%----------------------------------------------------------------
-%%find_routes(BusStops, BusRoutes, BusStopCodeA, BusStopCodeB, _Bus) ->
-%%  GetAdjacentNodes =
-%%    fun (BusStopCode) ->
-%%      BusStop = lists:keyfind(BusStopCode, #bus_stop.code, BusStops),
-%%      lists:map(fun ({NextBusStopCode, _ServiceNos}) -> NextBusStopCode end, BusStop#bus_stop.next_stops)
-%%    end,
-%%  Cost =
-%%    fun (MyServiceNo, #bus_stop{next_stops = NextStops}, AdjacentBusStopCode) ->
-%%      case lists:keyfind(AdjacentBusStopCode, 1, NextStops) of
-%%        {AdjacentBusStopCode, ServiceNos} ->
-%%          case lists:member(MyServiceNo, ServiceNos) of
-%%            true -> {cost, 0}; % if cost is zero, stay on the same MyServiceNo
-%%            false -> {cost, 1, ServiceNos}
-%%          end;
-%%        false -> {cost, infinity}
-%%      end
-%%    end,
-%%
-%%  Travel =
-%%    fun (B, TTL, Transits) ->
-%%      if
-%%        B =:= BusStopCodeB -> lists:append(Transits, [B]);
-%%        TTL =:= 0 -> ttl_error;
-%%        %% Else
-%%        true ->
-%%
-%%          {MyServiceNo, A} = lists:last(Transits),
-%%
-%%      end
-%%    end,
-%%  ok.
+handle_find_buses(BusStops, BusRoutes, BusStopCodeA, BusStopCodeB) ->
+  GetAdjacentNodes =
+    fun (BusStopCode) ->
+      BusStop = lists:keyfind(BusStopCode, #bus_stop.code, BusStops),
+      lists:map(fun ({NextBusStopCode, _ServiceNos}) -> NextBusStopCode end, BusStop#bus_stop.next_stops)
+    end,
+
+  GetBusStops = %% [ {service_no, [bus_stop.code,...]} ]
+    fun (BusStopCode) ->
+      BusStop = lists:keyfind(BusStopCode, #bus_stop.code, BusStops),
+      lists:foldl(
+        fun (ServiceNo, Acc0) ->
+          #bus_route{forward_bus_stop_codes = BusStopCodes} = maps:get(ServiceNo, BusRoutes),
+          [{ServiceNo, BusStopCodes} | Acc0]
+        end
+      , [], BusStop#bus_stop.service_nos)
+    end,
+
+  ServiceNos = lists:foldl(
+    fun ({ServiceNo, BusStopCodes}, ServiceNos0) ->
+      IsSource = lists:member(BusStopCodeA, BusStopCodes),
+      IsDest = lists:member(BusStopCodeB, BusStopCodes),
+
+      if
+        IsSource and IsDest -> [ ServiceNo | ServiceNos0];
+        %% else
+        true -> ServiceNos0
+      end
+    end
+    , [], GetBusStops(BusStopCodeA)),
+
+  {ok, ServiceNos}.

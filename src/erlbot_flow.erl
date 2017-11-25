@@ -227,7 +227,7 @@ execute_action_flow_item(Flow, FlowItem) ->
         ActionEntityName = "estimatedTime",
         PointA = maps:get("current_location", Flow#flow.entities),
         PointB = maps:get("destination", Flow#flow.entities),
-        Bus = "15",% maps:get("bus", Flow#flow.entities),
+        [Bus | _] = maps:get("buses", Flow#flow.entities),
         {ok, ActionResult} = ?MODULE:ActionMethodName(PointA, PointB,Bus),
         Flow#flow{
           entities = maps:put(ActionEntityName, ActionResult, Flow#flow.entities),
@@ -263,9 +263,8 @@ render(Template,EntitiesMap) ->
 %% Exported
 findBus(PointA,PointB) ->
   io:format("Finding buses from ~p to ~p~n", [PointA,PointB]),
-  {ok, [
-    "15"
-  ]}.
+  {ok, Buses} = erlbot_bus:find_buses(PointA,PointB),
+  {ok, Buses}.
 
 %% Exported
 estimate(PointA,PointB,Bus) ->
