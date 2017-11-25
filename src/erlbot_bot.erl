@@ -187,16 +187,24 @@ listening(Message, Conversation) when is_record(Message, message)->
             end,
             [], EntityNames),
 
+          io:format("Updating flow with entities: ~p~n", [Entities]),
           Flow2 = erlbot_flow:update_flow(Flow, Entities),
           Conversation3 = Conversation2#conversation{flow = Flow2},
-          io:format("Flow: ~p~n", [Flow2]),
+          io:format("Updated flow: ~p~n", [Flow2]),
 
           FlowItem = erlbot_flow:get_current_flow_item(Flow2),
-          Question = FlowItem#flow_item_interactive.question,
-
-          Conversation4 = pick_up_message(Message, Conversation3),
-          ConversationOut = reply(Question, Conversation4),
-          {next_state, guiding, ConversationOut, 30000};
+          if
+            is_record(FlowItem, flow_item_interactive) ->
+              Question = FlowItem#flow_item_interactive.question,
+              Conversation4 = pick_up_message(Message, Conversation3),
+              ConversationOut = reply(Question, Conversation4),
+              {next_state, guiding, ConversationOut, 30000};
+            true ->
+              Response = erlbot_flow:get_current_answer(Flow2),
+              %% Conversation4 = pick_up_message(Message, Conversation3)
+              ConversationOut = reply(Response, Conversation2#conversation{flow = Flow2}),
+              {next_state, guiding, ConversationOut, 30000}
+          end;
         _ -> {next_state, listening, Conversation#conversation{context = undefined, messages = []}, 5000}
     end.
     

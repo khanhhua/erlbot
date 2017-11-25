@@ -30,7 +30,7 @@
 -define(API_BUS_ARRIVAL, "http://datamall2.mytransport.sg/ltaodataservice/BusArrivalv2"). %% ?BusStopCode=83139
 
 -record(state, { bus_stops, bus_routes }).
--record(bus_stop, {bus_stop_code, service_nos = [], next_stops = []}). %% next_stops :: [ {bus_stop_code, [service_no1, service_no2...]}, ... ]
+-record(bus_stop, {code, service_nos = [], next_stops = []}). %% next_stops :: [ {bus_stop_code, [service_no1, service_no2...]}, ... ]
 -record(bus_route, {service_no, forward_bus_stop_codes = [], reverse_bus_stop_codes = []}).
 
 %%%===================================================================
@@ -92,7 +92,7 @@ init([]) ->
       [BusStopCode, _RoadName, _Description] = binary:split(Line, [<<"\t">>], [global]),
 
       [#bus_stop{
-          bus_stop_code = binary_to_list(BusStopCode),
+          code = binary_to_list(BusStopCode),
           service_nos = []
         } | Acc0]
     end, [], BusStopsLines),
@@ -125,13 +125,13 @@ init([]) ->
       UpdateBusStops = fun ([], BusStops_) -> BusStops_; (BusStopCodes, BusStops_) ->
         LastBusStopCode = lists:last(BusStopCodes),
 
-        case lists:keyfind(LastBusStopCode, #bus_stop.bus_stop_code, BusStops_) of
+        case lists:keyfind(LastBusStopCode, #bus_stop.code, BusStops_) of
           false ->
             BusStops_;
 
           LastBusStop when length(LastBusStop#bus_stop.next_stops) =:= 0 ->
             LastBusStop1 = LastBusStop#bus_stop{ next_stops = [{BusStopCode, [ServiceNo]}], service_nos = [ServiceNo] },
-            lists:keyreplace(LastBusStopCode, #bus_stop.bus_stop_code, BusStops_, LastBusStop1);
+            lists:keyreplace(LastBusStopCode, #bus_stop.code, BusStops_, LastBusStop1);
 
           LastBusStop ->
             LastBusStop1 = case lists:keyfind(BusStopCode, 1, LastBusStop#bus_stop.next_stops) of
@@ -146,7 +146,7 @@ init([]) ->
                   service_nos = [ServiceNo | LastBusStop#bus_stop.service_nos]
                 }
             end,
-            lists:keyreplace(LastBusStopCode, #bus_stop.bus_stop_code, BusStops_, LastBusStop1)
+            lists:keyreplace(LastBusStopCode, #bus_stop.code, BusStops_, LastBusStop1)
         end
       end,
 
@@ -283,71 +283,61 @@ handle_estimate(BusStops, BusRoutes, PointA, PointB, Bus) ->
   {ok, {{_Version, 200, _ReasonPhrase}, _NewHeaders, Body}} =
     httpc:request(get, {?API_BUS_ARRIVAL ++ "?BusStopCode=" ++ PointA, Headers}, [], []),
   PointAData = jsx:decode(list_to_binary(Body), [return_maps]),
-%%  BusesToPointA = lists:foldl(
-%%    fun (Item, Acc0) ->
-%%      [#{
-%%        service_no => maps:get(<<"ServiceNo">>, Item),
-%%        eta => maps:get(<<"EstimatedArrival">>, Item)
-%%      } | Acc0]
-%%    end, [], maps:get(<<"Services">>, PointAData)),
-%%
-%%  io:format("Arrival at A: ~p~n", [BusesToPointA]),
+  BusesToPointA = lists:foldl(
+    fun (Item, Acc0) ->
+      [#{
+        service_no => binary_to_list(maps:get(<<"ServiceNo">>, Item)),
+        eta => maps:get(<<"EstimatedArrival">>, maps:get(<<"NextBus">>, Item))
+      } | Acc0]
+    end, [], maps:get(<<"Services">>, PointAData)),
 
-  Routes = find_routes(BusStops, BusRoutes, PointA, PointB, Bus),
-  io:format("Routes: ~p~n", [Routes]),
+  io:format("Buses: ~p~n", [BusesToPointA]),
 
-  {ok, {10, minutes}}.
+  case lists:filter(
+    fun (#{service_no := ServiceNo}) ->
+      ServiceNo =:= Bus
+    end, BusesToPointA)
+  of
+    [] -> {ok, {1000, minutes}};
+    [#{eta := ETA}] ->
+      {_Days, { _HH, MM, SS }} = calendar:time_difference(calendar:local_time(), iso8601:parse(ETA)),
+      io:format("ETA in ~p~n", [{MM, SS}]),
+      {ok, {MM, minutes}}
+  end.
 
 %%----------------------------------------------------------------
 %% @doc
 %% @returns one best route as an array of bus stops
 %% @end
 %%----------------------------------------------------------------
-find_routes(BusStops, BusRoutes, BusStopCodeA, BusStopCodeB, _Bus) ->
-  Find = fun
-    Find (SearchedCode, [SearchedCode], Transits) -> lists:append(Transits, [SearchedCode]); %% Terminal condition
-    Find (SearchedCode, [SearchedCode|_], Transits) -> lists:append(Transits, [SearchedCode]); %% Terminal condition
-    Find (SearchedCode, [], _Transits) -> notfound;
-    Find (SearchedCode, BusStopCodes, Transits) when length(Transits) =:= 6 -> transit_issue;
-    Find (_, _, notfound) -> notfound;
-    Find (_, _, transit_issue) -> transit_issue;
-    Find (SearchedCode, BusStopCodes, Transits) ->
-      case lists:member(SearchedCode, BusStopCodes) of
-        false -> lists:foldl(
-          fun (BusStopCode, Transits0) ->
-            %% Walk the edges defined by bus routes (a map by service no)
-
-            BusStop = lists:keyfind(BusStopCode, #bus_stop.bus_stop_code, BusStops),
-            BusRoutes = lists:map(fun (ServiceNo) ->
-                                    maps:get(ServiceNo, BusRoutes)
-                                  end, BusStop#bus_stop.service_nos),
-
-            case lists:foldl(
-                fun (BusRoute, NextTransits0) ->
-                  Find(SearchedCode, BusRoute#bus_route.forward_bus_stop_codes, NextTransits0)
-                end, Transits, BusRoutes) %% lists:foldl
-            of
-              [NextTransit] -> lists:append(Transits0, [NextTransit]);
-              NextTransits -> lists:append(Transits0, [NextTransits])
-            end
-          end, Transits, BusStopCodes); %% lists:foldl
-        true ->
-          lists:append(Transits, [SearchedCode])
-      end
-  end,
-
-  BusStopA = lists:keyfind(BusStopCodeA, #bus_stop.bus_stop_code, BusStops),
-   lists:foldl(
-     fun (ServiceNo, Acc0) ->
-       Route = maps:get(ServiceNo, BusRoutes),
-       case lists:member(BusStopCodeB, Route#bus_route.forward_bus_stop_codes) of
-         true -> Route#bus_route.forward_bus_stop_codes;
-         _ -> Acc0
-       end
-     end, [], BusStopA#bus_stop.service_nos),
-
-  NextBusStopCodes = lists:map(fun ({BusStopCode, _}) -> BusStopCode end, BusStopA#bus_stop.next_stops),
-  case Find(BusStopCodeB, NextBusStopCodes, [BusStopCodeA]) of
-    notfound -> [];
-    Routes -> Routes
-  end.
+%%find_routes(BusStops, BusRoutes, BusStopCodeA, BusStopCodeB, _Bus) ->
+%%  GetAdjacentNodes =
+%%    fun (BusStopCode) ->
+%%      BusStop = lists:keyfind(BusStopCode, #bus_stop.code, BusStops),
+%%      lists:map(fun ({NextBusStopCode, _ServiceNos}) -> NextBusStopCode end, BusStop#bus_stop.next_stops)
+%%    end,
+%%  Cost =
+%%    fun (MyServiceNo, #bus_stop{next_stops = NextStops}, AdjacentBusStopCode) ->
+%%      case lists:keyfind(AdjacentBusStopCode, 1, NextStops) of
+%%        {AdjacentBusStopCode, ServiceNos} ->
+%%          case lists:member(MyServiceNo, ServiceNos) of
+%%            true -> {cost, 0}; % if cost is zero, stay on the same MyServiceNo
+%%            false -> {cost, 1, ServiceNos}
+%%          end;
+%%        false -> {cost, infinity}
+%%      end
+%%    end,
+%%
+%%  Travel =
+%%    fun (B, TTL, Transits) ->
+%%      if
+%%        B =:= BusStopCodeB -> lists:append(Transits, [B]);
+%%        TTL =:= 0 -> ttl_error;
+%%        %% Else
+%%        true ->
+%%
+%%          {MyServiceNo, A} = lists:last(Transits),
+%%
+%%      end
+%%    end,
+%%  ok.
