@@ -207,7 +207,7 @@ listening(Message, Conversation) when is_record(Message, message)->
           end;
         #intent{action = "terminate_conversation"} ->
           io:format("erbot_bot:listening - terminating flow"),
-          ConversationOut = reply("Bye now!", Conversation1#conversation{flow = undefined}),
+          ConversationOut = reply("Bye now!", Conversation1#conversation{context = undefined, flow = undefined}),
           {next_state, greeting, ConversationOut};
         _ -> {next_state, listening, Conversation#conversation{context = undefined, messages = []}, 5000}
     end.
@@ -260,7 +260,7 @@ guiding(Message, Conversation) when is_record(Message, message) ->
     Flow2 =:= terminated ->
       ConversationOut = reply("Bye!", Conversation2#conversation{flow = Flow2}),
       io:format("Bot saying bye bye...~n"),
-      {next_state, listening, ConversationOut#conversation{flow = undefined}};
+      {next_state, listening, ConversationOut#conversation{context = undefined, flow = undefined}};
     %% Else
     true -> CurrentFlowItem = erlbot_flow:get_current_flow_item(Flow2),
       if
