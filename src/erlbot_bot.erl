@@ -205,6 +205,10 @@ listening(Message, Conversation) when is_record(Message, message)->
               ConversationOut = reply(Response, Conversation2#conversation{flow = Flow2}),
               {next_state, guiding, ConversationOut, 30000}
           end;
+        #intent{action = "terminate_conversation"} ->
+          io:format("erbot_bot:listening - terminating flow"),
+          ConversationOut = reply("Bye now!", Conversation1#conversation{flow = undefined}),
+          {next_state, greeting, ConversationOut};
         _ -> {next_state, listening, Conversation#conversation{context = undefined, messages = []}, 5000}
     end.
     
@@ -231,6 +235,9 @@ guiding(Message, Conversation) when is_record(Message, message) ->
   Flow = Conversation#conversation.flow,
   Text = Message#message.text,
   {ok, Flow2} = case erlbot_ai:query(Text, [{sessionId, Conversation#conversation.session}]) of
+    {ok, #intent{action = "terminate_conversation"}} ->
+      io:format("erbot_bot:guiding - terminating flow"),
+      {ok, terminated};
     {ok, #intent{action = "declare_current_location", parameters = Parameters}} ->
       io:format("erbot_bot:guiding - update_flow flow"),
       Entity = #entity{
@@ -249,18 +256,24 @@ guiding(Message, Conversation) when is_record(Message, message) ->
       {ok, Flow}
   end,
 
-  CurrentFlowItem = erlbot_flow:get_current_flow_item(Flow2),
-
   if
-   is_record(CurrentFlowItem, flow_item_interactive) ->
-     Response = CurrentFlowItem#flow_item_interactive.question,
-     Conversation3 = reply(Response, Conversation2#conversation{flow = Flow2}),
-     io:format("Thank you for your information...~p~n", [Conversation3#conversation.messages]),
-     {next_state, guiding, Conversation3, 30000};
-   true ->
-     Response = erlbot_flow:get_current_answer(Flow2),
-     Conversation3 = reply(Response, Conversation2#conversation{flow = Flow2}),
-     {next_state, listening, Conversation3#conversation{context = undefined, session = undefined, messages = []}, 30000}
+    Flow2 =:= terminated ->
+      ConversationOut = reply("Bye!", Conversation2#conversation{flow = Flow2}),
+      io:format("Bot saying bye bye...~n"),
+      {next_state, listening, ConversationOut#conversation{flow = undefined}};
+    %% Else
+    true -> CurrentFlowItem = erlbot_flow:get_current_flow_item(Flow2),
+      if
+        is_record(CurrentFlowItem, flow_item_interactive) ->
+          Response = CurrentFlowItem#flow_item_interactive.question,
+          Conversation3 = reply(Response, Conversation2#conversation{flow = Flow2}),
+          io:format("Thank you for your information...~p~n", [Conversation3#conversation.messages]),
+          {next_state, guiding, Conversation3, 30000};
+        true ->
+          Response = erlbot_flow:get_current_answer(Flow2),
+          Conversation3 = reply(Response, Conversation2#conversation{flow = Flow2}),
+          {next_state, listening, Conversation3#conversation{context = undefined, session = undefined, messages = []}, 30000}
+      end
   end.
 
 %% guiding/3
