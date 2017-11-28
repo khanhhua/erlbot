@@ -68,6 +68,7 @@ generate_intent(Data, Context) ->
     end,
     parameters = lists:foldl(
       fun
+        ({}, Acc0) -> Acc0;
         ({_Key, <<>>}, Acc0) -> Acc0;
         ({Key, Value}, Acc0) -> [{binary_to_list(Key), binary_to_list(Value)}|Acc0]
       end,

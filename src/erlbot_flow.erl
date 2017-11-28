@@ -11,7 +11,7 @@
 
 -include("headers.hrl").
 %% API
--export([get_flow/1, get_entity_names/1, get_current_flow_item/1, update_flow/2, get_current_answer/1]).
+-export([get_flow/1, get_entity_names/1, get_current_flow_item/1, update_flow/2, get_current_answer/1, reset_flow/1]).
 
 -export([findBus/2, estimate/3]).
 
@@ -133,10 +133,14 @@ update_flow(Flow, [Entity|Entities]) ->
 
   update_flow(FlowOut, Entities);
 update_flow(Flow, []) ->
-  FlowItem = get_current_flow_item(Flow),
+  %% FlowItem = get_current_flow_item(Flow),
   FlowOut = execute_loop(Flow),
 
   FlowOut.
+
+reset_flow(Flow) ->
+  io:format("reset_flow: ~p~n", [Flow]),
+  Flow#flow{current_item = 1, entities = #{}, current_answer = undefined}.
 
 get_entity_names(#flow{items = FlowItems}) ->
   io:format("FlowItems: ~p~n", [FlowItems]),
