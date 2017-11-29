@@ -24,7 +24,7 @@ init(_Type, Req0, _Opts) ->
     {ok, undefined} ->
       {shutdown, Req1, undefined};
     {ok, BotPid} ->
-      io:format("SEE initializing with BotPid ~p", [BotPid]),
+      io:format("SEE initializing with BotPid ~p~n", [BotPid]),
       erlbot_bot:subscribe(BotPid, self()),
       {ok, Req2} = cowboy_req:chunked_reply(200,
       [
@@ -37,7 +37,7 @@ terminate(_, _, undefined) ->
   io:format("SEE terminating without any BotPid"),
   ok;
 terminate(_, _, {bot, BotPid}) ->
-  io:format("SEE terminating with BotPid ~p", [BotPid]),
+  io:format("SEE terminating with BotPid ~p~n", [BotPid]),
 
   erlbot_bot:unsubscribe(BotPid, self()),
   ok.

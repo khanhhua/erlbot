@@ -9,7 +9,7 @@
 
 %% API
 -export([start_link/0]).
--export([create_bot/1, get_bot/1]).
+-export([create_bot/1, get_bot/1, remove_bot/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -21,11 +21,11 @@
 %%====================================================================
 
 start_link() ->
-  supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+  supervisor:start_link({global, ?SERVER}, ?MODULE, []).
 
 create_bot(Username) ->
   MFA = {erlbot_bot,start_link,[Username]},
-  supervisor:start_child(?SERVER,
+  supervisor:start_child({global, ?SERVER},
     #{id => Username,
       start => MFA,
       restart => transient,
@@ -35,6 +35,16 @@ create_bot(Username) ->
 get_bot(Username) ->
   BotPid = global:whereis_name(Username),
   {ok, BotPid}.
+
+remove_bot(Username) ->
+  BotPid = global:whereis_name(Username),
+  global:unregister_name(Username),
+  io:format("Delete bot: ~p~n", [BotPid]),
+  Result = supervisor:delete_child({global, ?SERVER}, Username),
+
+  io:format("Result: ~p~n", [Result]),
+
+  ok.
 
 %%====================================================================
 %% Supervisor callbacks

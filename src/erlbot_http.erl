@@ -41,9 +41,15 @@ create_message(Req0, State) ->
 
 index_page(Req0, State) ->
   {ok, Binary} = file:read_file(filename:join(code:priv_dir(erlbot), "static/index.html")),
-  {Username, Req1} = cowboy_req:qs_val(<<"u">>, Req0),
+  {Username_, Req1} = cowboy_req:qs_val(<<"u">>, Req0),
+  Username = binary_to_list(Username_),
 
-  Req = cowboy_req:set_resp_cookie("username", binary_to_list(Username), [], Req1),
+  case erlbot_sup:create_bot(Username) of
+    {ok, BotPid} -> io:format("Started a bot: ~p~n", [BotPid]);
+    {error, _} -> io:format("Bot has already existed")
+  end,
+
+  Req = cowboy_req:set_resp_cookie("username", Username, [], Req1),
   cowboy_req:reply(200, [
     {<<"content-type">>, <<"text/html; charset=utf-8">>}
   ], Binary, Req).
