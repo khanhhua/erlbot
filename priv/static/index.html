@@ -6,26 +6,42 @@
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.6/css/bootstrap.min.css"
           integrity="sha384-rwoIResjU2yc3z8GV/NPeZWAv56rSmLldC3R/AZzGRnGxQQKnKkoFVhFQhNUwEyJ"
           crossorigin="anonymous">
+    <style>
+    .container {
+        position: relative;
+        height: 100vh;
+    }
+    #messages {
+        max-height: 80vh;
+        overflow: scroll;
+    }
+    .container .chatbox {
+        position: absolute;
+        left: 0;
+        bottom: 10px;
+        width: 100%;
+    }
+    </style>
 </head>
 <body>
     <div class="container">
         <div class="row">
             <div class="col">
-            <h1>ERL Bot</h1>
+                <h1>ERL Bot</h1>
 
-            <div id="messages"></div>
-            <form>
-                <div class="row">
-                    <div class="col-10">
-                        <textarea id="newMessage" rows="3" class="form-control"></textarea>
-                    </div>
-                    <div class="col">
-                        <button type="submit" id="btnSend" class="btn btn-primary">SEND</button>
-                    </div>
-                </div>
-            </form>
+                <div id="messages"></div>
             </div>
         </div>
+        <form class="chatbox">
+            <div class="row">
+                <div class="col-10">
+                    <textarea id="newMessage" rows="3" class="form-control"></textarea>
+                </div>
+                <div class="col">
+                    <button type="submit" id="btnSend" class="btn btn-primary">SEND</button>
+                </div>
+            </div>
+        </form>
     </div>
 
     <script src="https://code.jquery.com/jquery-3.2.1.min.js"
