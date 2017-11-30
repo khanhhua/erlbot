@@ -4,7 +4,7 @@ from urlparse import urlparse
 import httplib2 as http #External library if __name__=="__main__":
     #Authentication parameters
 headers = {
-    'AccountKey' : 'fATyZro1T0qJr07ERUf5IA==',
+    'AccountKey' : os.environ['ACCOUNT_KEY'],
     'accept' : 'application/json'
 } #this is by default
 
