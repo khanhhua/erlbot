@@ -5,7 +5,7 @@
 -module(erlbot_bot).
 -behaviour(gen_fsm).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
--export([greeting/2, greeting/3, listening/2, listening/3, guiding/2, guiding/3]).
+-export([greeting/2, greeting/3, listening/2, listening/3, guiding/2, guiding/3, idle/2]).
 
 -include("headers.hrl").
 
@@ -26,8 +26,8 @@
 start_link(Username) ->
   % Query database for the backing conversation
   {ok, Pid} = gen_fsm:start_link(?MODULE, #conversation{id=Username, username=Username}, []),
-  io:format("Registering ~p by the name ~p", [Pid, Username]),
-  global:register_name(Username, Pid),
+  io:format("Erlbot PID ~p can be looked up by the name ~p~n", [Pid, Username]),
+
   {ok, Pid}.
 
 stop(BotPid) ->
@@ -59,8 +59,9 @@ unsubscribe(BotPid, From) ->
 	Reason :: term().
 %% ====================================================================
 init(Conversation) ->
-    io:format("Michelle has waken up. Will greet in 30s...~n"),
-    {ok, greeting, Conversation, 10000}.
+  process_flag(trap_exit, true),
+  io:format("Michelle has waken up. Will greet in 30s...~n"),
+  {ok, greeting, Conversation, 10000}.
 
 
 %% greeting/2
@@ -298,6 +299,23 @@ guiding(Event, From, StateData) ->
     Reply = ok,
     {reply, Reply, listening, StateData}.
 
+%% idle/2
+%% ====================================================================
+%% @doc <a href="http://www.erlang.org/doc/man/gen_fsm.html#Module:StateName-3">gen_fsm:StateName/2</a>
+-spec idle(Event :: term(), StateData :: term()) -> Result when
+  Result :: {next_state, NextStateName, NewStateData}
+  | {next_state, NextStateName, NewStateData, Timeout}
+  | {next_state, NextStateName, NewStateData, hibernate}
+  | {stop, Reason, NewStateData},
+  NextStateName :: atom(),
+  NewStateData :: term(),
+  Timeout :: non_neg_integer() | infinity,
+  Reason :: term().
+%% ====================================================================
+idle(timeout, StateData) ->
+  io:format("Bot idle for too long. Shutting down...~n"),
+  {stop, normal, StateData}.
+
 %% handle_event/3
 %% ====================================================================
 %% @doc <a href="http://www.erlang.org/doc/man/gen_fsm.html#Module:handle_event-3">gen_fsm:handle_event/3</a>
@@ -315,9 +333,19 @@ handle_event(Event, StateName, StateData) ->
   io:format("Handle event ~p ~p ~n", [Event, StateName]),
   case Event of
     {subscription, From} ->
-      {next_state, StateName, StateData#conversation{subscribers = StateData#conversation.subscribers ++ [From] }};
+      NextState = if
+                    StateName =:= idle -> listening;
+                    true -> StateName
+                  end,
+      {next_state, NextState, StateData#conversation{subscribers = StateData#conversation.subscribers ++ [From] }};
     {unsubscription, From} ->
-      {next_state, StateName, StateData#conversation{subscribers = lists:filter(fun (X) -> X =:= From end, StateData#conversation.subscribers) }};
+      NextSubscribers = lists:filter(
+        fun (X) -> X =/= From end,
+        StateData#conversation.subscribers),
+      if
+        length(NextSubscribers) =:= 0 -> {next_state, idle, StateData#conversation{subscribers = NextSubscribers }, 30000};
+        true -> {next_state, StateName, StateData#conversation{subscribers = NextSubscribers }}
+      end;
     _ ->
       {next_state, StateName, StateData}
   end.
@@ -373,6 +401,9 @@ handle_info(Info, StateName, StateData) ->
 			| {shutdown, term()}
 			| term().
 %% ====================================================================
+terminate(shutdown, StateName, #conversation{id = Username}) ->
+  io:format("~p: Terminating bot... ~p [~p]~n", [StateName, Username, self()]),
+  ok;
 terminate(Reason, StateName, StatData) ->
     ok.
 
