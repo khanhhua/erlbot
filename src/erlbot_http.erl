@@ -46,7 +46,7 @@ index_page(Req0, State) ->
 
   case erlbot_sup:create_bot(Username) of
     {ok, BotPid} -> io:format("Started a bot: ~p~n", [BotPid]);
-    {error, _} -> io:format("Bot has already existed")
+    {error, Error} -> io:format("Bot has already existed. ~p~n", [Error])
   end,
 
   Req = cowboy_req:set_resp_cookie("username", Username, [], Req1),

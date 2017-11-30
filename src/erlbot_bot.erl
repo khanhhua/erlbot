@@ -26,8 +26,8 @@
 start_link(Username) ->
   % Query database for the backing conversation
   {ok, Pid} = gen_fsm:start_link(?MODULE, #conversation{id=Username, username=Username}, []),
-  io:format("Registering ~p by the name ~p~n", [Pid, Username]),
-  global:register_name(Username, Pid),
+  io:format("Erlbot PID ~p can be looked up by the name ~p~n", [Pid, Username]),
+
   {ok, Pid}.
 
 stop(BotPid) ->
@@ -314,7 +314,7 @@ guiding(Event, From, StateData) ->
 %% ====================================================================
 idle(timeout, StateData) ->
   io:format("Bot idle for too long. Shutting down...~n"),
-  {stop, shutdown, StateData}.
+  {stop, normal, StateData}.
 
 %% handle_event/3
 %% ====================================================================
