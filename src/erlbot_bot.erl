@@ -196,7 +196,9 @@ listening(Message, Conversation) when is_record(Message, message)->
           FlowItem = erlbot_flow:get_current_flow_item(Flow2),
           if
             is_record(FlowItem, flow_item_interactive) ->
-              Question = FlowItem#flow_item_interactive.question,
+              Template = FlowItem#flow_item_interactive.question,
+              Question = erlbot_flow:render(Template, Flow2#flow.entities),
+
               Conversation4 = pick_up_message(Message, Conversation3),
               ConversationOut = reply(Question, Conversation4),
               {next_state, guiding, ConversationOut, 30000};
@@ -266,7 +268,10 @@ guiding(Message, Conversation) when is_record(Message, message) ->
     true -> CurrentFlowItem = erlbot_flow:get_current_flow_item(Flow2),
       if
         is_record(CurrentFlowItem, flow_item_interactive) ->
-          Response = CurrentFlowItem#flow_item_interactive.question,
+          Template = CurrentFlowItem#flow_item_interactive.question,
+          io:format("Template: ~p~n", [Template]),
+
+          Response = erlbot_flow:render(Template, Flow2#flow.entities),
           Conversation3 = reply(Response, Conversation2#conversation{flow = Flow2}),
           io:format("Thank you for your information...~p~n", [Conversation3#conversation.messages]),
           {next_state, guiding, Conversation3, 30000};

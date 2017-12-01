@@ -10,7 +10,7 @@ flow:
       trigger:
         method: count(buses)
         op: PLURAL_CHECK
-      question: There are {{count(buses)}} buses. Which one?
+      question: There are {{buses}} buses. Which one?
       choices: buses
       entity: bus
   - action: estimate(current_location,destination,bus)
