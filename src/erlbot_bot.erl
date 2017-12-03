@@ -194,6 +194,7 @@ listening(Message, Conversation) when is_record(Message, message)->
           io:format("Updated flow: ~p~n", [Flow2]),
 
           FlowItem = erlbot_flow:get_current_flow_item(Flow2),
+          io:format("Current flow item: ~p~n", [FlowItem]),
           if
             is_record(FlowItem, flow_item_interactive) ->
               Template = FlowItem#flow_item_interactive.question,
@@ -204,6 +205,7 @@ listening(Message, Conversation) when is_record(Message, message)->
               {next_state, guiding, ConversationOut, 30000};
             true ->
               Response = erlbot_flow:get_current_answer(Flow2),
+              io:format("Response: ~p~n", [Response]),
               %% Conversation4 = pick_up_message(Message, Conversation3)
               ConversationOut = reply(Response, Conversation2#conversation{flow = Flow2}),
               {next_state, guiding, ConversationOut, 30000}
@@ -241,18 +243,28 @@ guiding(Message, Conversation) when is_record(Message, message) ->
     {ok, #intent{action = "terminate_conversation"}} ->
       io:format("erbot_bot:guiding - terminating flow"),
       {ok, terminated};
+
     {ok, #intent{action = "declare_current_location", parameters = Parameters}} ->
       io:format("erbot_bot:guiding - update_flow flow"),
       Entity = #entity{
         name = "current_location",
         value = proplists:get_value("current_location", Parameters)},
       erlbot_flow:update_flow(Flow, Entity);
+
     {ok, #intent{action = "declare_destination", parameters = Parameters}} ->
       io:format("erbot_bot:guiding - update_flow flow"),
       Entity = #entity{
         name = "destination",
         value = proplists:get_value("destination", Parameters)},
       erlbot_flow:update_flow(Flow, Entity);
+
+    {ok, #intent{action = "select_bus", parameters = Parameters}} ->
+      io:format("erbot_bot:guiding - select_bus flow"),
+      Entity = #entity{
+        name = "bus",
+        value = proplists:get_value("bus", Parameters)},
+      erlbot_flow:update_flow(Flow, Entity);
+
     _ ->
       io:format("erbot_bot:guiding - flow remains the same"),
       reply("Sorry but I could not understand...", Conversation),

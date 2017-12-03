@@ -9,8 +9,14 @@ flow:
   - optional:
       trigger:
         method: count(buses)
+        op: SINGULAR_CHECK
+      action: select_bus(buses)
+      entity: bus
+  - optional:
+      trigger:
+        method: count(buses)
         op: PLURAL_CHECK
-      question: There are {{buses}} buses. Which one?
+      question: There are buses {{buses}}. Which one?
       choices: buses
       entity: bus
   - action: estimate(current_location,destination,bus)

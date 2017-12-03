@@ -13,7 +13,7 @@
 %% API
 -export([get_flow/1, get_entity_names/1, get_current_flow_item/1, update_flow/2, get_current_answer/1, reset_flow/1, render/2]).
 
--export([findBus/2, estimate/3, count/1]).
+-export([findBus/2, estimate/3, count/1, select_bus/1]).
 
 -define(flow_from_yaml(FlowName), yamerl_constr:file(filename:join([code:priv_dir(erlbot), 'flows', FlowName ++ ".yaml"]))).
 
@@ -161,17 +161,21 @@ execute_loop(Flow, FlowItem) when is_record(FlowItem, flow_item_interactive) ->
   if
     FlowItem#flow_item_interactive.trigger =/= undefined ->
       execute_flow_item(Flow, FlowItem);
-      %% execute_loop(FlowOut);
     true ->
       Flow
   end;
 execute_loop(Flow, FlowItem) when is_record(FlowItem, flow_item_auto) ->
-  FlowOut = execute_action_flow_item(Flow, FlowItem),
+  FlowOut = if
+    FlowItem#flow_item_auto.trigger =/= undefined ->
+      execute_action_flow_item(Flow, FlowItem);
+    true ->
+      execute_action_flow_item(Flow, FlowItem)
+  end,
 
   execute_loop(FlowOut).
 
 execute_flow_item(Flow, FlowItem, Entity) when is_record(FlowItem, flow_item_interactive) ->
-  io:format("execute_flow_item ~n"),
+  io:format("execute_flow_item... ~n"),
 
   EntityName = Entity#entity.name,
   TriggerResult = case FlowItem#flow_item_interactive.trigger of
@@ -179,12 +183,17 @@ execute_flow_item(Flow, FlowItem, Entity) when is_record(FlowItem, flow_item_int
       {Method, ArgNames} = parse_method_expression(TriggerMethodExpression),
       %% Execute the TriggerExpressionMethod
       MethodResult = apply_flow_method(Flow, Method, ArgNames),
+      io:format("- MethodResult ~p... ~n", [MethodResult]),
       %% Evaluate TriggerOp to a boolean
       case TriggerOp of
         "PLURAL_CHECK" -> if
-                            MethodResult > 0 -> true;
+                            MethodResult > 1 -> true;
                             true -> false
                           end;
+        "SINGULAR_CHECK" -> if
+                              MethodResult =:= 1 -> true;
+                              true -> false
+                            end;
         _ -> false
       end;
     undefined ->
@@ -209,19 +218,23 @@ execute_flow_item(Flow, FlowItem, Entity) when is_record(FlowItem, flow_item_int
     end
   end,
 
-  io:format("erbot_flow:execute_flow_item Flow: ~p~n", [FlowOut]),
   FlowOut.
 
-execute_flow_item(Flow, FlowItem) ->
+execute_flow_item(Flow, FlowItem) when is_record(FlowItem, flow_item_interactive) ->
+  io:format("execute_flow_item: ~n"),
+
   TriggerResult = case FlowItem#flow_item_interactive.trigger of
     #flow_trigger{method = TriggerMethodExpression, op = TriggerOp} ->
       {Method, ArgNames} = parse_method_expression(TriggerMethodExpression),
       %% Execute the TriggerExpressionMethod
       MethodResult = apply_flow_method(Flow, Method, ArgNames),
+      io:format("- MethodResult ~p...~n", [MethodResult]),
       %% Evaluate TriggerOp to a boolean
+      io:format("- TriggerOp ~p...~n", [TriggerOp]),
+
       case TriggerOp of
         "PLURAL_CHECK" -> if
-                            MethodResult > 0 -> true;
+                            MethodResult > 1 -> true;
                             true -> false
                           end;
         _ -> false
@@ -230,18 +243,31 @@ execute_flow_item(Flow, FlowItem) ->
       true
   end,
 
-  io:format("erbot_flow:execute_flow_item Executing flow item...~n"),
-  io:format("erbot_flow:execute_flow_item FlowItem: ~p~n", [FlowItem]),
-
   if
     TriggerResult -> Flow;
     true -> Flow#flow{current_item = Flow#flow.current_item + 1}
   end.
 
 execute_action_flow_item(Flow, FlowItem) ->
+  io:format("execute_flow_item: ~n"),
+  io:format("- Auto flow: ~n"),
+
   TriggerResult = case FlowItem#flow_item_auto.trigger of
-    #flow_trigger{method = _TriggerMethod, op = _TriggerOp} ->
-      false; % TODO Execute trigger logic
+    #flow_trigger{method = TriggerMethodExpression, op = TriggerOp} ->
+      {Method, ArgNames} = parse_method_expression(TriggerMethodExpression),
+      %% Execute the TriggerExpressionMethod
+      MethodResult = apply_flow_method(Flow, Method, ArgNames),
+      io:format("- MethodResult ~p...~n", [MethodResult]),
+      %% Evaluate TriggerOp to a boolean
+      io:format("- TriggerOp ~p...~n", [TriggerOp]),
+
+      case TriggerOp of
+        "SINGULAR_CHECK" -> if
+                              MethodResult =:= 1 -> true;
+                              true -> false
+                            end;
+        _ -> false
+      end;
     undefined ->
       true
   end,
@@ -261,13 +287,26 @@ execute_action_flow_item(Flow, FlowItem) ->
           entities = maps:put(ActionEntityName, ActionResult, Flow#flow.entities),
           current_item = Flow#flow.current_item + 1
         };
+
+      Action when Action =:= "select_bus(buses)" -> % TODO: Extract
+        ActionMethodName = list_to_atom("select_bus"),
+        ActionEntityName = "bus",
+        Buses = maps:get("buses", Flow#flow.entities),
+        {ok, ActionResult} = ?MODULE:ActionMethodName(Buses),
+
+        Flow#flow{
+          entities = maps:put(ActionEntityName, ActionResult, Flow#flow.entities),
+          current_item = Flow#flow.current_item + 1
+        };
+
       Action when Action =:= "estimate(current_location,destination,bus)" -> % TODO: Extract estimate Bus, pointA, pointB
         ActionMethodName = list_to_atom("estimate"),
         ActionEntityName = "estimatedTime",
         PointA = maps:get("current_location", Flow#flow.entities),
         PointB = maps:get("destination", Flow#flow.entities),
-        [Bus | _] = maps:get("buses", Flow#flow.entities),
-        {ok, ActionResult} = ?MODULE:ActionMethodName(PointA, PointB,Bus),
+        Bus = maps:get("bus", Flow#flow.entities),
+        {ok, ActionResult} = ?MODULE:ActionMethodName(PointA, PointB, Bus),
+
         Flow#flow{
           entities = maps:put(ActionEntityName, ActionResult, Flow#flow.entities),
           current_item = Flow#flow.current_item + 1
@@ -283,7 +322,7 @@ execute_action_flow_item(Flow, FlowItem) ->
         current_answer = ParameterizedAnswer
       };
     true ->
-      Flow2
+      execute_loop(Flow2)
   end.
 
 render(Template, EntitiesMap) ->
@@ -327,4 +366,12 @@ estimate(PointA,PointB,Bus) ->
   {ok, Estimation} = erlbot_bus:estimate(PointA,PointB,Bus),
   {ok, Estimation}.
 
+%% Exported
 count(Buses) -> length(Buses).
+
+%% Exported
+select_bus(Buses) ->
+  [Bus] = Buses,
+
+  io:format("select_bus: ~p~n", [Bus]),
+  {ok, Bus}.
