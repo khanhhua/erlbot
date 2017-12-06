@@ -10,6 +10,7 @@
 -author("khanhhua").
 
 -include("headers.hrl").
+-import(jsx, [decode/1]).
 %% API
 -export([query/2]).
 

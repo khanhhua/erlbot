@@ -2,11 +2,12 @@
  [{description, "An OTP application"},
   {vsn, "0.1.0"},
   {registered, []},
-  {mod, { erlbot_app, []}},
+  {mod, { erlbot_app, [iso8601]}},
   {applications,
    [kernel,
     stdlib,
     inets,
+    jsx,
     cowboy,
     yamerl
    ]},
