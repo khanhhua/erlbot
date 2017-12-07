@@ -10,6 +10,7 @@
 -author("khanhhua").
 
 -behaviour(gen_server).
+-import(iso8601, [parse/1]).
 
 %% API
 -export([
@@ -84,9 +85,9 @@ find_buses(PointA,PointB) ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([]) ->
-  io:format("Updating bus stops database from DataMall SG (r)...~n"),
-  %% filename:join(code:priv_dir(erlbot), bus-data/bus_stops-20171020.csv)
-  {ok, BusStopsRaw} = file:read_file("/Users/khanhhua/dev/erlbot/priv/bus-data/bus_stops-20171020.csv"),
+  BusStopCSV = filename:join(code:priv_dir(erlbot), "bus-data/bus_stops-20171020.csv"),
+  io:format("Updating bus stops database from DataMall SG (r), file: ~p...~n", [BusStopCSV]),
+  {ok, BusStopsRaw} = file:read_file(BusStopCSV),
 
   [_ | BusStopsLines] = binary:split(BusStopsRaw, [<<"\n">>], [global]),
 
@@ -102,8 +103,10 @@ init([]) ->
     end, [], BusStopsLines),
   io:format("DONE Updating bus stops database from DataMall SG (r). Total stops: ~w...~n", [length(BusStops)]),
 
-  io:format("Updating bus routes database from DataMall SG (r)...~n"),
-  {ok, BusRoutesRaw} = file:read_file("/Users/khanhhua/dev/erlbot/priv/bus-data/bus_routes-20171020.csv"),
+  BusRoutesCSV = filename:join(code:priv_dir(erlbot), "bus-data/bus_routes-20171020.csv"),
+  io:format("Updating bus routes database from DataMall SG (r), file: ~p...~n", [BusRoutesCSV]),
+  {ok, BusRoutesRaw} = file:read_file(BusRoutesCSV),
+
   [_ | BusRoutesLines] = binary:split(BusRoutesRaw, [<<"\n">>], [global]),
   {BusRoutes, BusStops2} = lists:foldl(
     fun (<<"">>, Acc0) -> Acc0; %% EOF

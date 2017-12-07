@@ -61,7 +61,25 @@ unsubscribe(BotPid, From) ->
 init(Conversation) ->
   process_flag(trap_exit, true),
   io:format("Michelle has waken up. Will greet in 30s...~n"),
-  {ok, greeting, Conversation, 10000}.
+
+  Id = Conversation#conversation.id,
+
+  case ets:lookup(table_bots, Id) of
+    [] ->
+      io:format("... Starting fresh!~n"),
+      {ok, greeting, Conversation, 10000};
+
+    [Bot] ->
+      io:format("... Restoring state!~n"),
+      Conversation0 = Bot#bot.conversation,
+      Subscribers = Conversation0#conversation.subscribers,
+      if
+        length(Subscribers) > 0 -> io:format("... You have subscribers: ~p~n", [Subscribers]);
+        true -> io:format("... Conversation: ~p~n", [Conversation])
+      end,
+      io:format("... Restored to `~p` state!~n", [Bot#bot.statename]),
+      {ok, Bot#bot.statename, Conversation0, 5000}
+  end.
 
 
 %% greeting/2
@@ -420,9 +438,19 @@ handle_info(Info, StateName, StateData) ->
 %% ====================================================================
 terminate(shutdown, StateName, #conversation{id = Username}) ->
   io:format("~p: Terminating bot... ~p [~p]~n", [StateName, Username, self()]),
+
+  Result = ets:delete(table_bots, Username),
+  io:format("ets:delete(table_bots, Conversation): ~p~n", [Result]),
+
   ok;
-terminate(Reason, StateName, StatData) ->
-    ok.
+terminate(Reason, StateName, Conversation) ->
+  io:format("~p: Terminating bot abnormally... ~p [~p]~n", [StateName, Conversation, self()]),
+
+  Id = Conversation#conversation.id,
+  Result = ets:insert(table_bots, #bot{id = Id, conversation = Conversation, statename = StateName}),
+  io:format("ets:insert(table_bots, Conversation): ~p~n", [Result]),
+
+  ok.
 
 
 %% code_change/4
