@@ -1,18 +1,19 @@
 {application, erlbot,
- [{description, "An OTP application"},
+ [{description, "ERLbot: A Chatbot based on OTP"},
   {vsn, "0.1.0"},
   {registered, []},
-  {mod, { erlbot_app, [iso8601]}},
+  {mod, { erlbot_app, []}},
   {applications,
    [kernel,
     stdlib,
     inets,
     jsx,
     cowboy,
-    yamerl
+    yamerl,
+    iso8601
    ]},
   {env,[]},
-  {modules, []},
+  {modules, [erlbot_app, erlbot_sup, erlbot_ai, erlbot_bus, erlbot_flow, erlbot_http, erlbot_sse]},
 
   {maintainers, []},
   {licenses, []},
