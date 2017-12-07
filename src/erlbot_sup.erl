@@ -21,6 +21,8 @@
 %%====================================================================
 
 start_link() ->
+  Tid = ets:new(table_bots, [set, public, named_table, {keypos, 2}]),
+  io:format("Table ID: ~p~n", [Tid]),
   supervisor:start_link({global, ?SERVER}, ?MODULE, []).
 
 create_bot(Username) ->
@@ -86,7 +88,9 @@ remove_bot(Username) ->
 
 %% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
 init([]) ->
-  {ok, { {one_for_one, 0, 1}, [
+  SupFlags = #{strategy => one_for_one, intensity => 1, period => 5},
+
+  {ok, { SupFlags, [
     #{
       id => erlbot_bus,
       start => {erlbot_bus, start_link, []},

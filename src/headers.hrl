@@ -7,6 +7,7 @@
 
 -record(conversation, {id, username, context, flow, session, messages=[], subscribers=[]}).
 -record(message, {who, text}).
+-record(bot, {id, conversation, statename}).
 
 -record(flow, {items, current_item, entities=#{}, current_answer}).
 -record(flow_item_interactive, {question, entity, trigger}).
