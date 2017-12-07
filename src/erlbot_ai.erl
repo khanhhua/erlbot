@@ -31,8 +31,9 @@ query(Text, [{sessionId, SessionId}, {context, Context}]) ->
     {"sessionId", SessionId},
     {"timezone", "Asia/Singapore"}
   ],
+  {ok, DialogFlowApiKey} = application:get_env(erlbot, dialogflow_api_key),
   Headers = [
-    {"authorization", "Bearer ab8bc71108284909a45b9e86d4534e31"}
+    {"authorization", "Bearer " ++ DialogFlowApiKey}
   ],
 
   Url = lists:flatten(lists:foldl(

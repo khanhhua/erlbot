@@ -286,8 +286,10 @@ code_change(_OldVsn, State, _Extra) ->
 -spec(handle_estimate(BusStops :: term(), BusRoutes :: term(), PointA :: string(), PointB :: string(), Bus :: string()) ->
   {ok, Estimation :: term()}).
 handle_estimate(BusStops, BusRoutes, PointA, PointB, Bus) ->
+  {ok, DataMallApiKey} = application:get_env(erlbot, datamall_api_key),
+
   Headers = [
-    {"AccountKey", "fATyZro1T0qJr07ERUf5IA=="}
+    {"AccountKey", DataMallApiKey}
   ],
 
   {ok, {{_Version, 200, _ReasonPhrase}, _NewHeaders, Body}} =
